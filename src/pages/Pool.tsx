@@ -1,7 +1,128 @@
+import { useChainId, useReadContract } from "wagmi";
+import { poolAbi } from "../abi/PoolManager";
+import { getContractAddress } from "../config/contracts";
+import { DataTable, type Column } from "../components/DataTable";
+import { formatUnits } from "viem";
+import { TokenPair } from "../components/TokenPair";
+import { useTokenInfos } from "../hooks/useTokenInfos";
+import { useMemo } from "react";
+
+type Pool={
+    fee:number;
+    feeProtocol:number;
+    index:number;
+    liquidity:bigint;
+    pool:`0x${string}`;
+    sqrtPriceX96:bigint;
+    tick:number;
+    tickLower:number;
+    tickUpper:number;
+    token0:`0x${string}`;
+    token1:`0x${string}`;
+}
+
+const shortAddress = (address?:string) => {
+    return address ? address.slice(0, 6) + '...' + address.slice(-4) : '';
+}
+
+// sqrtPriceX96 换算成 price
+// price (token1 / token0) = (sqrtPriceX96 / 2^96)² × 10^(decimals0 - decimals1)
+const sqrtPriceX96ToPrice = (sqrtPriceX96:bigint,decimals0=18,decimals1=18):number => {
+    if (sqrtPriceX96===0n) return 0;
+    const Q96 = 2n ** 96n;
+    const sqrtPrice = Number(sqrtPriceX96) / Number(Q96);
+    const price = sqrtPrice * sqrtPrice;
+    // 调整 decimals
+    return price * Math.pow(10, decimals0 - decimals1);
+}
+
 export const PoolPage = () => {
+    const chainId = useChainId();
+
+    const {data:pools,isLoading ,error} =useReadContract({
+        address:getContractAddress(chainId,'PoolManager'),
+        abi:poolAbi,
+        functionName:"getAllPools",  
+        query:{
+            enabled:!!chainId
+        } 
+    })
+
+    // 收集所有不重复的 token 地址
+    const allTokenAddrs = useMemo(()=>{
+      const set = new Set<`0x${string}`>();
+      pools?.forEach((pool) => {
+          set.add(pool.token0);
+          set.add(pool.token1);
+      })
+      return [...set];
+    },[pools])
+
+    const {data:pairs} =useReadContract({
+      address:getContractAddress(chainId,'PoolManager'),
+      abi:poolAbi,
+      functionName:"getPairs",  
+      query:{
+          enabled:!!chainId
+      } 
+  })
+  console.log('poolmanager pools',pools);
+  console.log('poolmanager pairs',pairs);
+
+    const {tokenMap}=useTokenInfos(allTokenAddrs);
+
+    // render:(row) => <TokenPair token0={row.token0} token1={row.token1} tokenMap={tokenMap} />,
+   const columns : Column<Pool>[] = [
+        {
+            key:'token',
+            label:'Token',
+            render:(row) => `${shortAddress(row.token0)} / ${shortAddress(row.token1)}`,
+        },
+        {
+            key:'fee',
+            label:'Fee tier',
+            render:(row) => `${(row.fee / 10000).toFixed(2)}%`,
+        },
+        {
+            key:'range',
+            label:'Set price range',
+            render:(row) => row.tickLower + ' - ' + row.tickUpper,
+        },
+        {
+            key:'price',
+            label:'Current price',
+            render:(row) => sqrtPriceX96ToPrice(row.sqrtPriceX96).toFixed(3),
+        },
+        {
+            key:'liquidity',
+            label:'Liquidity',
+            render:(row) => parseFloat(formatUnits(row.liquidity,18)).toFixed(2),
+        },
+        ]
+        
     return (
-        <div>
-            <h1>Pool</h1>
+        <div className="min-h-screen bg-gray-50 px-6 py-8">
+        <div className="max-w-7xl mx-auto">
+          <p className="text-2xl font-semibold text-gray-900 mb-2 text-left">Pool</p>
+  
+          <DataTable<Pool>
+            title="Pool list"
+            extra={
+              <>
+                <button className="px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition">
+                  My Positions
+                </button>
+                <button className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                  Add Pool
+                </button>
+              </>
+            }
+            columns={columns}
+            data={pools as Pool[] | undefined}
+            loading={isLoading}
+            error={error}
+          />
         </div>
+      </div>
     )
 }
