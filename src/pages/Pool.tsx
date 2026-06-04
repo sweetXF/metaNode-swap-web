@@ -7,6 +7,7 @@ import { useTokenInfos } from "../hooks/useTokenInfos";
 import { useMemo } from "react";
 import { formatBigInt, shortAddress } from "../utils/format";
 import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from "../utils/price";
+import { Link, useNavigate } from "react-router-dom";
 
 type Pool={
     fee:number;
@@ -23,6 +24,7 @@ type Pool={
 }
 
 export const PoolPage = () => {
+    const navigate = useNavigate();
     const chainId = useChainId();
 
     const {data:pools,isLoading ,error} =useReadContract({
@@ -87,9 +89,18 @@ export const PoolPage = () => {
             title="Pool list"
             extra={
               <>
-                <button className="px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition">
+              {/* 需在App.tsx中添加路由<Route path="/position" element={<PositionPage />} /> */}
+                <button className="px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition"
+                onClick={() => navigate('/position')}>
                   My Positions
                 </button>
+                {/* <Link
+                  to="/position"
+                  className="inline-block px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition"
+                >
+                  My Positions
+                </Link> */}
+
                 <button className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
                   Add Pool
                 </button>

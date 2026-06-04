@@ -6,7 +6,7 @@ import Header from './components/Header'
 import { wagmiConfig } from './wagmi'
 import { SwapPage } from './pages/Swap'
 import { PoolPage } from './pages/Pool'
-// import { PositionPage } from './pages/Position'
+import { PositionPage } from './pages/Position'
 
 const queryClient = new QueryClient()
 
@@ -22,7 +22,7 @@ function App() {
               <Route path="/" element={<Navigate to="/swap" replace />} />
               <Route path="/swap" element={<SwapPage />} />
               <Route path="/pool" element={<PoolPage />} />
-              {/* <Route path="/position" element={<PositionPage />} /> */}
+              <Route path="/position" element={<PositionPage />} />
             </Routes>
           </BrowserRouter>
         </RainbowKitProvider>
