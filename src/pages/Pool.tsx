@@ -2,10 +2,11 @@ import { useChainId, useReadContract } from "wagmi";
 import { poolAbi } from "../abi/PoolManager";
 import { getContractAddress } from "../config/contracts";
 import { DataTable, type Column } from "../components/DataTable";
-import { formatUnits } from "viem";
 import { TokenPair } from "../components/TokenPair";
 import { useTokenInfos } from "../hooks/useTokenInfos";
 import { useMemo } from "react";
+import { formatBigInt, shortAddress } from "../utils/format";
+import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from "../utils/price";
 
 type Pool={
     fee:number;
@@ -19,21 +20,6 @@ type Pool={
     tickUpper:number;
     token0:`0x${string}`;
     token1:`0x${string}`;
-}
-
-const shortAddress = (address?:string) => {
-    return address ? address.slice(0, 6) + '...' + address.slice(-4) : '';
-}
-
-// sqrtPriceX96 换算成 price
-// price (token1 / token0) = (sqrtPriceX96 / 2^96)² × 10^(decimals0 - decimals1)
-const sqrtPriceX96ToPrice = (sqrtPriceX96:bigint,decimals0=18,decimals1=18):number => {
-    if (sqrtPriceX96===0n) return 0;
-    const Q96 = 2n ** 96n;
-    const sqrtPrice = Number(sqrtPriceX96) / Number(Q96);
-    const price = sqrtPrice * sqrtPrice;
-    // 调整 decimals
-    return price * Math.pow(10, decimals0 - decimals1);
 }
 
 export const PoolPage = () => {
@@ -58,35 +44,27 @@ export const PoolPage = () => {
       return [...set];
     },[pools])
 
-    const {data:pairs} =useReadContract({
-      address:getContractAddress(chainId,'PoolManager'),
-      abi:poolAbi,
-      functionName:"getPairs",  
-      query:{
-          enabled:!!chainId
-      } 
-  })
-  console.log('poolmanager pools',pools);
-  console.log('poolmanager pairs',pairs);
+    console.log('poolmanager pools',pools);
 
     const {tokenMap}=useTokenInfos(allTokenAddrs);
 
     // render:(row) => <TokenPair token0={row.token0} token1={row.token1} tokenMap={tokenMap} />,
+    // render:(row) => `${shortAddress(row.token0)} / ${shortAddress(row.token1)}`,
    const columns : Column<Pool>[] = [
         {
             key:'token',
             label:'Token',
-            render:(row) => `${shortAddress(row.token0)} / ${shortAddress(row.token1)}`,
+            render:(row) => `${shortAddress(row.token0)} / ${shortAddress(row.token1)}`
         },
         {
             key:'fee',
             label:'Fee tier',
-            render:(row) => `${(row.fee / 10000).toFixed(2)}%`,
+            render:(row) => formatFeeTier(row.fee),
         },
         {
             key:'range',
             label:'Set price range',
-            render:(row) => row.tickLower + ' - ' + row.tickUpper,
+            render:(row) => formatPriceRange(row.tickLower,row.tickUpper),
         },
         {
             key:'price',
@@ -96,7 +74,7 @@ export const PoolPage = () => {
         {
             key:'liquidity',
             label:'Liquidity',
-            render:(row) => parseFloat(formatUnits(row.liquidity,18)).toFixed(2),
+            render:(row) => formatBigInt(row.liquidity),
         },
         ]
         

@@ -28,9 +28,6 @@ export const useTokenInfos = (tokenAddrs:`0x${string}`[]) => {
         }
     })
 
-    console.log('erc20 data：',data);
-    console.log('erc20 all tokenAddrs：',tokenAddrs);
-
     //address -> { symbol, decimals, balance }
     const tokenMap=useMemo(()=>{
         const m=new Map<string,{symbol:string,decimals:number,balance:bigint}>();
@@ -43,8 +40,6 @@ export const useTokenInfos = (tokenAddrs:`0x${string}`[]) => {
         })
         return m;
     },[data,tokenAddrs])
-
-    console.log('erc20 tokenMap：',tokenMap);
 
     return {tokenMap,isLoading};
 };
