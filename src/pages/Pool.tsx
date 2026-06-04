@@ -10,12 +10,12 @@ import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from "../utils/p
 import { Link, useNavigate } from "react-router-dom";
 
 type Pool={
-    fee:number;
+    fee:number;  // 手续费率（所有 LP 共享）
     feeProtocol:number;
     index:number;
-    liquidity:bigint;
+    liquidity:bigint; // 池子总流动性（所有 LP 累加）
     pool:`0x${string}`;
-    sqrtPriceX96:bigint;
+    sqrtPriceX96:bigint; // 当前价格
     tick:number;
     tickLower:number;
     tickUpper:number;
@@ -45,8 +45,6 @@ export const PoolPage = () => {
       })
       return [...set];
     },[pools])
-
-    console.log('poolmanager pools',pools);
 
     const {tokenMap}=useTokenInfos(allTokenAddrs);
 
