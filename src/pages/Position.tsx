@@ -4,7 +4,9 @@ import { getContractAddress } from "../config/contracts"
 import { positionAbi } from "../abi/PositionManager"
 import { shortAddress } from "../utils/format"
 import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from "../utils/price"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
+import { Modal } from "../components/Modal"
+import { ModalFooter } from "../components/ModalFooter"
 
 type Position={
     fee:number;
@@ -26,6 +28,8 @@ export const PositionPage = () => {
     const chainId = useChainId();
     const {isConnected,chainId:curChainId}=useAccount();
    const isChainidMatch=curChainId===chainId;
+
+   const [openAddPosition,setOpenAddPosition]=useState(false);
 
     const {data:positions,isLoading ,error,refetch} =useReadContract({
         address:getContractAddress(chainId,'PositionManager'),
@@ -66,6 +70,7 @@ export const PositionPage = () => {
             functionName:"burn",
             args:[row.id],
         })
+        
         console.log('remove position：',row);
         console.log('txhash isPending writeError：',txHash,isPending,writeError)
         console.log('isConfirming isSuccess isError：',isConfirming,isConfirmed,isError);
@@ -73,6 +78,10 @@ export const PositionPage = () => {
 
     const handleCollect = (row:Position) => {
         console.log('collect position',row);
+    }
+
+    const handleAddPosition = () => {
+        console.log('add position');
     }
 
     const columns : Column<Position>[] = [
@@ -96,6 +105,11 @@ export const PositionPage = () => {
                 //     label:'Current price',
                 //     render:(row) => sqrtPriceX96ToPrice(row.sqrtPriceX96).toFixed(3),
                 // },
+                {
+                    key:'index',
+                    label:'index',
+                    render:(row) => row.index,
+                },
                 {
                     key:'id',
                     label:'Position id',
@@ -149,9 +163,14 @@ export const PositionPage = () => {
             title="My Positions"
             extra={
               <>
-                <button className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
-                  Add
+                <button className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                  onClick={() => setOpenAddPosition(true)}>
+                  Add Position
                 </button>
+                <Modal isOpen={openAddPosition} onClose={() => setOpenAddPosition(false)} title="Add Position"
+                    footer={<ModalFooter onClose={() => setOpenAddPosition(false)} handleAddClick={() => handleAddPosition()}/>}>
+                    <p>TODO: Add Position</p>
+                </Modal>
               </>
             }
             columns={columns}

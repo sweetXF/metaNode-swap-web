@@ -4,10 +4,12 @@ import { getContractAddress } from "../config/contracts";
 import { DataTable, type Column } from "../components/DataTable";
 import { TokenPair } from "../components/TokenPair";
 import { useTokenInfos } from "../hooks/useTokenInfos";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { formatBigInt, shortAddress } from "../utils/format";
 import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from "../utils/price";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { Modal } from "../components/Modal";
+import { ModalFooter } from "../components/ModalFooter";
 
 type Pool={
     fee:number;  // 手续费率（所有 LP 共享）
@@ -26,6 +28,8 @@ type Pool={
 export const PoolPage = () => {
     const navigate = useNavigate();
     const chainId = useChainId();
+
+    const [openAddPool, setOpenAddPool] = useState(false);
 
     const {data:pools,isLoading ,error} =useReadContract({
         address:getContractAddress(chainId,'PoolManager'),
@@ -47,6 +51,10 @@ export const PoolPage = () => {
     },[pools])
 
     const {tokenMap}=useTokenInfos(allTokenAddrs);
+
+    const handleAddPool=()=>{
+      console.log('add pool');
+    }
 
     // render:(row) => <TokenPair token0={row.token0} token1={row.token1} tokenMap={tokenMap} />,
     // render:(row) => `${shortAddress(row.token0)} / ${shortAddress(row.token1)}`,
@@ -92,16 +100,17 @@ export const PoolPage = () => {
                 onClick={() => navigate('/position')}>
                   My Positions
                 </button>
-                {/* <Link
-                  to="/position"
-                  className="inline-block px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition"
-                >
-                  My Positions
-                </Link> */}
 
-                <button className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                <button className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                  onClick={() => setOpenAddPool(true)}>
                   Add Pool
                 </button>
+              <Modal isOpen={openAddPool} onClose={() => setOpenAddPool(false)} title="Add Pool" 
+                footer={<ModalFooter onClose={() => setOpenAddPool(false)} handleAddClick={() => handleAddPool()}/>}
+                >
+                <p>TODO: Add Pool</p>
+              </Modal>
+
               </>
             }
             columns={columns}
