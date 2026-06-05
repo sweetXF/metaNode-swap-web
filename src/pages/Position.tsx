@@ -1,4 +1,4 @@
-import { useChainId, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi"
+import { useAccount, useChainId, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi"
 import { DataTable, type Column } from "../components/DataTable"
 import { getContractAddress } from "../config/contracts"
 import { positionAbi } from "../abi/PositionManager"
@@ -24,23 +24,27 @@ type Position={
 
 export const PositionPage = () => {
     const chainId = useChainId();
+    const {isConnected,chainId:curChainId}=useAccount();
+   const isChainidMatch=curChainId===chainId;
+
     const {data:positions,isLoading ,error,refetch} =useReadContract({
         address:getContractAddress(chainId,'PositionManager'),
         abi:positionAbi,
         functionName:"getAllPositions",  
         query:{
-            enabled:!!chainId
+            enabled:isConnected && !!chainId && isChainidMatch
         }
     })
 
-    console.log('positions',positions);
-
-    // writeContract
-    // isPending:等待用户在钱包确认
+    // isPending：等待用户在钱包确认。 
+    // txHash：交易已提交后的 tx 哈希。
+    // error： 用户拒绝 / 模拟失败等错误
     const {writeContract,data:txHash,isPending,error:writeError} = useWriteContract();
 
     // 等待交易上链确认
-    // isLoading : 已发出但还未确认（等出块）
+    // isLoading：已发出但还未确认（等出块）
+    // isSuccess： 交易已成功上链
+    // isError： 交易失败 / 被回滚
     const {isLoading:isConfirming, isSuccess:isConfirmed,isError }=useWaitForTransactionReceipt({
         hash:txHash,
         query:{
@@ -62,7 +66,9 @@ export const PositionPage = () => {
             functionName:"burn",
             args:[row.id],
         })
-        console.log('remove position',row);
+        console.log('remove position：',row);
+        console.log('txhash isPending writeError：',txHash,isPending,writeError)
+        console.log('isConfirming isSuccess isError：',isConfirming,isConfirmed,isError);
     }
 
     const handleCollect = (row:Position) => {
@@ -118,6 +124,21 @@ export const PositionPage = () => {
                     )
                 },
     ]
+
+    if(!isConnected || !isChainidMatch) {
+        return (
+                <div className="max-w-7xl mx-auto p-5">
+                    <p className="text-2xl font-semibold text-gray-900 mb-2 text-left">Positions</p>
+                    {
+                        !isConnected && <p className="text-gray-500">Connect your wallet</p> 
+                    }
+                    {
+                        isConnected && !isChainidMatch && <p className="text-gray-500">Connect your wallet to Sepolia network</p>
+                    }
+                    
+                </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 px-6 py-8">
