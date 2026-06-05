@@ -8,18 +8,18 @@ import { useEffect } from "react"
 
 type Position={
     fee:number;
-    feeGrowthInside0LastX128:bigint;
-    feeGrowthInside1LastX128:bigint;
-    id:bigint; // 仓位编号（NFT tokenId）
+    feeGrowthInside0LastX128:bigint; //上次提取手续费时的 feeGrowthGlobal0X128
+    feeGrowthInside1LastX128:bigint; // 上次提取手续费时的 feeGrowthGlobal1X128
+    id:bigint; // 仓位编号 positionId
     index:number; // 位置编号,属于哪个 pool
-    liquidity:bigint; // 这个用户在 pool 里的流动性份额
+    liquidity:bigint; // 该 Position 拥有的流动性
     owner:`0x${string}`;  // 拥有者（具体用户）
     tickLower:number;  // 用户主动选择的窄区间
     tickUpper:number;
     token0:`0x${string}`;
     token1:`0x${string}`;
-    tokensOwed0:bigint; // 累积未领取的手续费 (token0)
-    tokensOwed1:bigint; // 累积未领取的手续费 (token1)
+    tokensOwed0:bigint; // 可提取的 token0 数量
+    tokensOwed1:bigint; // 可提取的 token1 数量
 }
 
 export const PositionPage = () => {
