@@ -89,7 +89,7 @@ export const PoolPage = () => {
     return (
         <div className="min-h-screen bg-gray-50 px-6 py-8">
         <div className="max-w-7xl mx-auto">
-          <p className="text-2xl font-semibold text-gray-900 mb-2 text-left">Pool</p>
+          <p className="text-2xl font-semibold text-gray-900 mb-2 text-center py-2">Pool</p>
   
           <DataTable<Pool>
             title="Pool list"

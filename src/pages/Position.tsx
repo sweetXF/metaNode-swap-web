@@ -157,7 +157,7 @@ export const PositionPage = () => {
     return (
         <div className="min-h-screen bg-gray-50 px-6 py-8">
         <div className="max-w-7xl mx-auto">
-          <p className="text-2xl font-semibold text-gray-900 mb-2 text-left">Positions</p>
+          <p className="text-2xl font-semibold text-gray-900 mb-2 text-center py-2">Positions</p>
   
           <DataTable<Position>
             title="My Positions"
