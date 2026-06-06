@@ -25,8 +25,8 @@ type Position={
 }
 
 export const PositionPage = () => {
-    const chainId = useChainId();
-    const {isConnected,chainId:curChainId}=useAccount();
+    const chainId = useChainId();// 项目wagmi配置的链 id
+    const {isConnected,chainId:curChainId}=useAccount(); // 当前钱包连接状态
    const isChainidMatch=curChainId===chainId;
 
    const [openAddPosition,setOpenAddPosition]=useState(false);
