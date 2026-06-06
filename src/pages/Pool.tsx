@@ -48,7 +48,6 @@ export const PoolPage = () => {
     const [tokenOut, setTokenOut] = useState<TokenInfo>(XRP);
     const [amountIn, setAmountIn] = useState("");
     const [amountOut, setAmountOut] = useState("");
-
     const [fee, setFee] = useState<number>();
     const [lowPrice, setLowPrice] = useState("");
     const [highPrice, setHighPrice] = useState("");

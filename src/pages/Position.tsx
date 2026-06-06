@@ -7,6 +7,8 @@ import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from "../utils/p
 import { useEffect, useState } from "react"
 import { Modal } from "../components/Modal"
 import { ModalFooter } from "../components/ModalFooter"
+import { AmountInput, type TokenInfo } from "../components/AmountInput"
+import { FeeTierSelect } from "../components/FeeTierSelect"
 
 type Position={
     fee:number;
@@ -24,12 +26,28 @@ type Position={
     tokensOwed1:bigint; // 可提取的 token1 数量
 }
 
+// 临时硬编码 token（后续应该从 token 列表取）
+const ETH: TokenInfo = {
+    address: "0x4798388e3adE569570Df626040F07DF71135C48E",
+    symbol: "ETH",
+  };
+  const XRP: TokenInfo = {
+    address: "0x86B5bd6FFf459854ca91318274E47F4eEE245CF28",
+    symbol: "XRP",
+  };
+
 export const PositionPage = () => {
     const chainId = useChainId();// 项目wagmi配置的链 id
     const {isConnected,chainId:curChainId}=useAccount(); // 当前钱包连接状态
    const isChainidMatch=curChainId===chainId;
 
    const [openAddPosition,setOpenAddPosition]=useState(false);
+
+    const [tokenIn, setTokenIn] = useState<TokenInfo>(ETH);
+    const [tokenOut, setTokenOut] = useState<TokenInfo>(XRP);
+    const [amountIn, setAmountIn] = useState("");
+    const [amountOut, setAmountOut] = useState("");
+    const [fee, setFee] = useState<number>();
 
     const {data:positions,isLoading ,error,refetch} =useReadContract({
         address:getContractAddress(chainId,'PositionManager'),
@@ -169,7 +187,30 @@ export const PositionPage = () => {
                 </button>
                 <Modal isOpen={openAddPosition} onClose={() => setOpenAddPosition(false)} title="Add Position"
                     footer={<ModalFooter onClose={() => setOpenAddPosition(false)} handleAddClick={() => handleAddPosition()}/>}>
-                    <p>TODO: Add Position</p>
+                    
+                    <p className="text-sm pb-1"><span className="text-red-500">*</span>Deposit amounts</p>
+                <div className="space-y-1">
+                    <AmountInput
+                    token={tokenIn}
+                    amount={amountIn}
+                    onAmountChange={setAmountIn}
+                    onTokenSelect={() => console.log("open token list (in)")}
+                    showMax
+                    />
+                    <AmountInput
+                    token={tokenOut}
+                    amount={amountOut}
+                    onAmountChange={setAmountOut}
+                    onTokenSelect={() => console.log("open token list (out)")}
+                    // readOnly
+                    />
+                </div>
+
+                <p className="text-sm pt-3 pb-1"><span className="text-red-500">*</span>Fee tier</p>
+                <FeeTierSelect
+                  disabled={!tokenIn || !tokenOut}
+                  value={fee}
+                  onChange={setFee} />
                 </Modal>
               </>
             }
