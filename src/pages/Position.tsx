@@ -9,6 +9,7 @@ import { Modal } from "../components/Modal"
 import { ModalFooter } from "../components/ModalFooter"
 import { AmountInput, type TokenInfo } from "../components/AmountInput"
 import { FeeTierSelect } from "../components/FeeTierSelect"
+import { TokenList } from "../components/TokenList"
 
 type Position={
     fee:number;
@@ -26,15 +27,18 @@ type Position={
     tokensOwed1:bigint; // 可提取的 token1 数量
 }
 
+enum Selecting {
+    In,
+    Out,
+  }
+
 // 临时硬编码 token（后续应该从 token 列表取）
-const ETH: TokenInfo = {
-    address: "0x4798388e3adE569570Df626040F07DF71135C48E",
-    symbol: "ETH",
-  };
-  const XRP: TokenInfo = {
-    address: "0x86B5bd6FFf459854ca91318274E47F4eEE245CF28",
-    symbol: "XRP",
-  };
+const TOKEN_LIST: TokenInfo[] = [
+    { address: "0x4798388e3adE569570Df626040F07DF71135C48E", symbol: "MNTA" },
+    { address: "0x86B5bd6FFf459854ca91318274E47F4eEE245CF28", symbol: "XRP" },
+    { address: "0x86B5bd6FFf459854ca91318274E47F4eEGH45SV23", symbol: "ETH" },
+    // 后续可加更多
+  ];
 
 export const PositionPage = () => {
     const chainId = useChainId();// 项目wagmi配置的链 id
@@ -43,8 +47,8 @@ export const PositionPage = () => {
 
    const [openAddPosition,setOpenAddPosition]=useState(false);
 
-    const [tokenIn, setTokenIn] = useState<TokenInfo>(ETH);
-    const [tokenOut, setTokenOut] = useState<TokenInfo>(XRP);
+    const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
+    const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
     const [amountIn, setAmountIn] = useState("");
     const [amountOut, setAmountOut] = useState("");
     const [fee, setFee] = useState<number>();
@@ -101,6 +105,27 @@ export const PositionPage = () => {
     const handleAddPosition = () => {
         console.log('add position');
     }
+
+    //用一个 state 统一管理"哪个输入框正在选 token"
+    const [selecting, setSelecting] = useState<Selecting>();
+    const selectedToken =  selecting === Selecting.In ? tokenIn : selecting === Selecting.Out ? tokenOut : undefined
+
+    // tokens 弹窗选中 token 时触发
+    // 如果选中的是另一边的 token，自动交换。（也可传disabledAddresses，禁选另一边的token）
+    const handleSelectToken = (token: TokenInfo) => {
+      if (selecting === Selecting.In) {
+          //如： 用户在 In 选了 XRP，但 Out 已经是 XRP，就把 Out 设为旧的 In（ETH），变成"交换两边"
+          if(token.address.toLowerCase() === tokenOut.address.toLowerCase()){
+            setTokenOut(tokenIn);
+          }
+            setTokenIn(token);
+        } else if (selecting === Selecting.Out) {
+          if(token.address.toLowerCase() === tokenIn.address.toLowerCase()){
+            setTokenIn(tokenOut);
+          }
+            setTokenOut(token);
+        }
+    };
 
     const columns : Column<Position>[] = [
         {
@@ -188,23 +213,37 @@ export const PositionPage = () => {
                 <Modal isOpen={openAddPosition} onClose={() => setOpenAddPosition(false)} title="Add Position"
                     footer={<ModalFooter onClose={() => setOpenAddPosition(false)} handleAddClick={() => handleAddPosition()}/>}>
                     
-                    <p className="text-sm pb-1"><span className="text-red-500">*</span>Deposit amounts</p>
+                <p className="text-sm pb-1"><span className="text-red-500">*</span>Deposit amounts</p>
                 <div className="space-y-1">
                     <AmountInput
                     token={tokenIn}
                     amount={amountIn}
                     onAmountChange={setAmountIn}
-                    onTokenSelect={() => console.log("open token list (in)")}
+                    onTokenSelect={() => setSelecting(Selecting.In)}
                     showMax
                     />
                     <AmountInput
                     token={tokenOut}
                     amount={amountOut}
                     onAmountChange={setAmountOut}
-                    onTokenSelect={() => console.log("open token list (out)")}
+                    onTokenSelect={() => setSelecting(Selecting.Out)}
                     // readOnly
                     />
                 </div>
+
+                {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
+                <TokenList
+                    tokens={TOKEN_LIST}
+                    open={selecting!== undefined}
+                    onClose={() => setSelecting(undefined)}
+                    onSelect={handleSelectToken}
+                    selected={selectedToken}
+                    // 如果不想要"自动交换in Out"行为，可选：直接禁选（置灰）列表中另一边的token
+                    // disabledAddresses={
+                    //   selecting === Selecting.In ? [tokenOut.address] :
+                    //   selecting === Selecting.Out ? [tokenIn.address] : []
+                    // }
+                    />
 
                 <p className="text-sm pt-3 pb-1"><span className="text-red-500">*</span>Fee tier</p>
                 <FeeTierSelect

@@ -10,25 +10,31 @@ const TOKEN_LIST: TokenInfo[] = [
   // 后续可加更多
 ];
 
+enum Selecting {
+  In,
+  Out,
+}
+
 export const SwapPage = () => {
     const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
     const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
     const [amountIn, setAmountIn] = useState("");
-    const [amountOut, setAmountOut] = useState("");
+    const [amountOut, setAmountOut] = useState("");   
 
     //用一个 state 统一管理"哪个输入框正在选 token"
-    const [selecting, setSelecting] = useState<'in' | 'out' | null>(null);
+    const [selecting, setSelecting] = useState<Selecting>();
+    const selectedToken =  selecting === Selecting.In ? tokenIn : selecting === Selecting.Out ? tokenOut : undefined
 
-    // 选中 token 时触发
+    // tokens 弹窗选中 token 时触发
     // 如果选中的是另一边的 token，自动交换。（也可传disabledAddresses，禁选另一边的token）
     const handleSelectToken = (token: TokenInfo) => {
-      if (selecting === 'in') {
-          //如： 用户在 in 选了 XRP，但 out 已经是 XRP，就把 out 设为旧的 in（ETH），变成"交换两边"
+      if (selecting === Selecting.In) {
+          //如： 用户在 In 选了 XRP，但 Out 已经是 XRP，就把 Out 设为旧的 In（ETH），变成"交换两边"
           if(token.address.toLowerCase() === tokenOut.address.toLowerCase()){
             setTokenOut(tokenIn);
           }
             setTokenIn(token);
-        } else if (selecting === 'out') {
+        } else if (selecting === Selecting.Out) {
           if(token.address.toLowerCase() === tokenIn.address.toLowerCase()){
             setTokenIn(tokenOut);
           }
@@ -52,7 +58,7 @@ export const SwapPage = () => {
                         token={tokenIn}
                         amount={amountIn}
                         onAmountChange={setAmountIn}
-                        onTokenSelect={() => setSelecting('in')}
+                        onTokenSelect={() => setSelecting(Selecting.In)}
                         showMax
                         />
 
@@ -60,10 +66,24 @@ export const SwapPage = () => {
                         token={tokenOut}
                         amount={amountOut}
                         onAmountChange={setAmountOut}
-                        onTokenSelect={() => setSelecting('out')}
+                        onTokenSelect={() => setSelecting(Selecting.Out)}
                         // readOnly
                         />
                     </div>
+
+                     {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
+                    <TokenList
+                      tokens={TOKEN_LIST}
+                      open={selecting!== undefined}
+                      onClose={() => setSelecting(undefined)}
+                      onSelect={handleSelectToken}
+                      selected={selectedToken}
+                      // 如果不想要"自动交换in Out"行为，可选：直接禁选（置灰）列表中另一边的token
+                      // disabledAddresses={
+                      //   selecting === Selecting.In ? [tokenOut.address] :
+                      //   selecting === Selecting.Out ? [tokenIn.address] : []
+                      // }
+                      />
 
                     <button
                         onClick={handleSwap}
@@ -74,20 +94,7 @@ export const SwapPage = () => {
                     </button>
             </div>
             </div>
-
-            {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
-            <TokenList
-              tokens={TOKEN_LIST}
-              open={selecting!== null}
-              onClose={() => setSelecting(null)}
-              onSelect={handleSelectToken}
-              selected={selecting === 'in' ? tokenIn : selecting === 'out' ? tokenOut : undefined}
-              // 如果不想要"自动交换in out"行为，可选：直接禁选（置灰）列表中另一边的token
-              // disabledAddresses={
-              //   selecting === 'in' ? [tokenOut.address] :
-              //   selecting === 'out' ? [tokenIn.address] : []
-              // }
-              />
+        
 
         </div>
     )
