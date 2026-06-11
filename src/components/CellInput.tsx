@@ -1,43 +1,48 @@
 // 单个数值输入框
 interface CellInputProps {
-    value: string;
-    onChange: (value: string) => void;
-    placeholder?: string;
-    step?: number;
-    disabled?: boolean;
-    unit?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  step?: number;
+  disabled?: boolean;
+  unit?: string;
 }
 
-export const CellInput=({
-    value,
-    onChange,
-    placeholder="0",
-    step=1,
-    disabled,
-    unit
-}:CellInputProps)=>{
-    // 调整值(步进加减)
-    const adjust = (step: number) => {
-        const curValue = Number(value) || 0;
-        const nextValue = curValue + step;
-        if (nextValue < 0) return; // 价格不能为负数
-        onChange(nextValue.toString());
-    };
+export const CellInput = ({
+  value,
+  onChange,
+  placeholder = '0',
+  step = 1,
+  disabled,
+  unit,
+}: CellInputProps) => {
+  const formatDecimal = (val: string): string => {
+    return val
+      .replace(/[^\d.]/g, '') // 清除非数字、小数点以外字符
+      .replace(/^\./, '') // 禁止小数点在开头
+      .replace(/(\.)(?=.*\1)/g, ''); // 最多一个小数点
+  };
 
-    return (
-        <div>
+  // 调整值(步进加减)
+  const adjust = (step: number) => {
+    const curValue = Number(value) || 0;
+    const nextValue = curValue + step;
+    if (nextValue < 0) return; // 价格不能为负数
+    onChange(nextValue.toString());
+  };
+
+  return (
+    <div>
       <div
         className={`flex items-center bg-white border border-gray-200 rounded-md overflow-hidden focus-within:border-blue-500 transition ${
-          disabled ? "opacity-50 cursor-not-allowed" : ""
+          disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
         <input
           type="text"
           inputMode="decimal"
           value={value}
-          onChange={(e) =>
-            onChange(e.target.value.replace(/[^\d.]/g, ""))
-          }
+          onChange={e => onChange(formatDecimal(e.target.value))}
           placeholder={placeholder}
           disabled={disabled}
           className="flex-1 min-w-0 px-3 py-2 text-sm bg-transparent outline-none placeholder:text-gray-400 disabled:cursor-not-allowed"
@@ -73,5 +78,5 @@ export const CellInput=({
       {/* 输入框下方文案 */}
       {unit && <p className="mt-1 text-xs text-gray-400">{unit}</p>}
     </div>
-    )
-}
+  );
+};

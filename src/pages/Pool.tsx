@@ -47,7 +47,7 @@ export const PoolPage = () => {
   const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
-  const [fee, setFee] = useState<number>(3000);
+  const [fee, setFee] = useState('3000');
   const [lowPrice, setLowPrice] = useState('');
   const [highPrice, setHighPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
@@ -105,7 +105,7 @@ export const PoolPage = () => {
           {
             token0: tokenIn.address,
             token1: tokenOut.address,
-            fee: fee,
+            fee: Number(fee),
             tickLower: priceToTick(lowPrice),
             tickUpper: priceToTick(highPrice),
             sqrtPriceX96: priceToSqrtPriceX96(currentPrice),
@@ -256,7 +256,13 @@ export const PoolPage = () => {
                 <p className="text-sm pt-3 pb-1">
                   <span className="text-red-500">*</span>Fee tier
                 </p>
-                <FeeTierSelect disabled={!tokenIn || !tokenOut} value={fee} onChange={setFee} />
+                <CellInput
+                  value={fee}
+                  onChange={setFee}
+                  placeholder="Fee tier"
+                  disabled={!tokenIn || !tokenOut}
+                />
+                {/* <FeeTierSelect disabled={!tokenIn || !tokenOut} value={fee} onChange={setFee} /> */}
 
                 <p className="text-sm pt-3 pb-1">
                   <span className="text-red-500">*</span>Set price range
