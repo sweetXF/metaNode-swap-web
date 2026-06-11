@@ -1,4 +1,4 @@
-import { useChainId, useReadContract } from 'wagmi';
+import { useAccount, useChainId, useReadContract, useWriteContract } from 'wagmi';
 import { poolAbi } from '../abi/PoolManager';
 import { getContractAddress } from '../config/contracts';
 import { DataTable, type Column } from '../components/DataTable';
@@ -6,7 +6,13 @@ import { TokenPair } from '../components/TokenPair';
 import { useTokenInfos } from '../hooks/useTokenInfos';
 import { useMemo, useState } from 'react';
 import { formatBigInt, shortAddress } from '../utils/format';
-import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from '../utils/price';
+import {
+  formatFeeTier,
+  formatPriceRange,
+  priceToSqrtPriceX96,
+  priceToTick,
+  sqrtPriceX96ToPrice,
+} from '../utils/price';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../components/Modal';
 import { ModalFooter } from '../components/ModalFooter';
@@ -14,45 +20,34 @@ import { AmountInput, type TokenInfo } from '../components/AmountInput';
 import { FeeTierSelect } from '../components/FeeTierSelect';
 import { CellInput } from '../components/CellInput';
 import { TokenList } from '../components/TokenList';
-
-type Pool = {
-  fee: number; // 手续费率（所有 LP 共享）
-  feeProtocol: number;
-  index: number;
-  liquidity: bigint; // 池子总流动性（所有 LP 累加）
-  pool: `0x${string}`;
-  sqrtPriceX96: bigint; // 当前价格
-  tick: number;
-  tickLower: number;
-  tickUpper: number;
-  token0: `0x${string}`;
-  token1: `0x${string}`;
-};
-
-enum Selecting {
-  In,
-  Out,
-}
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { wagmiConfig } from '../wagmi';
+import { Selecting, type Pool } from '../config/types';
 
 // 临时硬编码 token（后续应该从 token 列表取）
 const TOKEN_LIST: TokenInfo[] = [
-  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTA' },
-  { address: '0x86B5bd6FFf459854ca91318274E47F4eEE245CF28', symbol: 'XRP' },
-  { address: '0x86B5bd6FFf459854ca91318274E47F4eEGH45SV23', symbol: 'ETH' },
-  // 后续可加更多
+  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTokenA' },
+  { address: '0x5A4eA3a013D42Cfd1B1609d19f6eA998EeE06D30', symbol: 'MNTokenB' },
+  { address: '0x86B5df6FF459854ca91318274E47F4eEE245CF28', symbol: 'MNTokenC' },
+  { address: '0x7af86B1034AC4C925Ef5C3F637D1092310d83F03', symbol: 'MNTokenD' },
 ];
 
 export const PoolPage = () => {
   const navigate = useNavigate();
-  const chainId = useChainId();
+  const chainId = useChainId(); // 项目wagmi配置的链 id
+  const { isConnected, chainId: curChainId } = useAccount(); // 当前钱包连接状态
+  const isChainidMatch = curChainId === chainId;
+
+  const poolManagerAddress = getContractAddress(chainId, 'PoolManager');
 
   const [openAddPool, setOpenAddPool] = useState(false);
+  const [addPoolError, setAddPoolError] = useState('');
 
   const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
   const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
-  const [fee, setFee] = useState<number>();
+  const [fee, setFee] = useState<number>(3000);
   const [lowPrice, setLowPrice] = useState('');
   const [highPrice, setHighPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
@@ -61,8 +56,9 @@ export const PoolPage = () => {
     data: pools,
     isLoading,
     error,
+    refetch,
   } = useReadContract({
-    address: getContractAddress(chainId, 'PoolManager'),
+    address: poolManagerAddress,
     abi: poolAbi,
     functionName: 'getAllPools',
     query: {
@@ -73,7 +69,7 @@ export const PoolPage = () => {
   // 收集所有不重复的 token 地址
   const allTokenAddrs = useMemo(() => {
     const set = new Set<`0x${string}`>();
-    pools?.forEach(pool => {
+    pools?.forEach((pool: Pool) => {
       set.add(pool.token0);
       set.add(pool.token1);
     });
@@ -82,20 +78,52 @@ export const PoolPage = () => {
 
   const { tokenMap } = useTokenInfos(allTokenAddrs);
 
-  const handleAddPool = () => {
-    console.log('add pool');
-    // writeContract({
-    //   functionName: 'createPool',
-    //   args: [{
-    //     token0,
-    //     token1,
-    //     fee,
-    //     tickLower: priceToTick(lowPrice),
-    //     tickUpper: priceToTick(highPrice),
-    //     sqrtPriceX96: priceToSqrtPriceX96(currentPrice),  // ← 这里
-    //   }],
-    // })
-    // setOpenAddPool(false);
+  const { writeContractAsync } = useWriteContract();
+
+  const handleAddPool = async () => {
+    setAddPoolError('');
+    if (fee === undefined) return;
+    if (!amountIn || !amountOut) {
+      setAddPoolError('Please enter both amounts');
+      return;
+    }
+    if (!lowPrice || !highPrice) {
+      setAddPoolError('Please enter low and high price');
+      return;
+    }
+    if (!currentPrice) {
+      setAddPoolError('Please enter current price');
+      return;
+    }
+
+    try {
+      const hash = await writeContractAsync({
+        address: poolManagerAddress,
+        abi: poolAbi,
+        functionName: 'createAndInitializePoolIfNecessary',
+        args: [
+          {
+            token0: tokenIn.address,
+            token1: tokenOut.address,
+            fee: fee,
+            tickLower: priceToTick(lowPrice),
+            tickUpper: priceToTick(highPrice),
+            sqrtPriceX96: priceToSqrtPriceX96(currentPrice),
+          },
+        ],
+      });
+
+      // 等上链
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+      setOpenAddPool(false);
+      refetch();
+    } catch (error: unknown) {
+      const message =
+        (error as { shortMessage?: string; message?: string })?.shortMessage ||
+        (error as Error)?.message ||
+        'Add pool failed';
+      setAddPoolError(message);
+    }
   };
 
   //用一个 state 统一管理"哪个输入框正在选 token"
@@ -126,7 +154,7 @@ export const PoolPage = () => {
     {
       key: 'token',
       label: 'Token',
-      render: row => `${shortAddress(row.token0)} / ${shortAddress(row.token1)}`,
+      render: row => <TokenPair token0={row.token0} token1={row.token1} tokenMap={tokenMap} />,
     },
     {
       key: 'fee',
@@ -169,7 +197,13 @@ export const PoolPage = () => {
 
               <button
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                onClick={() => setOpenAddPool(true)}
+                onClick={() => {
+                  if (!isConnected || !isChainidMatch) {
+                    alert('Please connect your wallet to Sepolia network');
+                    return;
+                  }
+                  setOpenAddPool(true);
+                }}
               >
                 Add Pool
               </button>
@@ -181,7 +215,7 @@ export const PoolPage = () => {
                 footer={
                   <ModalFooter
                     onClose={() => setOpenAddPool(false)}
-                    handleAddClick={() => handleAddPool()}
+                    handleAddClick={handleAddPool}
                   />
                 }
               >
@@ -252,6 +286,8 @@ export const PoolPage = () => {
                   placeholder="current price"
                   disabled={!tokenIn || !tokenOut}
                 />
+
+                {addPoolError ? <p className="text-red-500 p-2 text-sm">{addPoolError}</p> : null}
               </Modal>
             </>
           }

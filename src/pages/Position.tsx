@@ -1,63 +1,47 @@
-import {
-  useAccount,
-  useChainId,
-  useReadContract,
-  useWaitForTransactionReceipt,
-  useWriteContract,
-} from 'wagmi';
+import { useAccount, useChainId, useReadContract, useWriteContract } from 'wagmi';
 import { DataTable, type Column } from '../components/DataTable';
 import { getContractAddress } from '../config/contracts';
 import { positionAbi } from '../abi/PositionManager';
-import { shortAddress } from '../utils/format';
+import { formatToBigInt, shortAddress } from '../utils/format';
 import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from '../utils/price';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { ModalFooter } from '../components/ModalFooter';
 import { AmountInput, type TokenInfo } from '../components/AmountInput';
-import { FeeTierSelect } from '../components/FeeTierSelect';
 import { TokenList } from '../components/TokenList';
-
-type Position = {
-  fee: number;
-  feeGrowthInside0LastX128: bigint; //上次提取手续费时的 feeGrowthGlobal0X128
-  feeGrowthInside1LastX128: bigint; // 上次提取手续费时的 feeGrowthGlobal1X128
-  id: bigint; // 仓位编号 positionId
-  index: number; // 位置编号,属于哪个 pool
-  liquidity: bigint; // 该 Position 拥有的流动性
-  owner: `0x${string}`; // 拥有者（具体用户）
-  tickLower: number; // 用户主动选择的窄区间
-  tickUpper: number;
-  token0: `0x${string}`;
-  token1: `0x${string}`;
-  tokensOwed0: bigint; // 可提取的 token0 数量
-  tokensOwed1: bigint; // 可提取的 token1 数量
-};
-
-enum Selecting {
-  In,
-  Out,
-}
+import { wagmiConfig } from '../wagmi';
+import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
+import { usePositionApproval } from '../hooks/usePositionApproval';
+import { poolAbi } from '../abi/PoolManager';
+import { TokenPair } from '../components/TokenPair';
+import { useTokenInfos } from '../hooks/useTokenInfos';
+import { Selecting, type Pool, type Position } from '../config/types';
 
 // 临时硬编码 token（后续应该从 token 列表取）
 const TOKEN_LIST: TokenInfo[] = [
-  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTA' },
-  { address: '0x86B5bd6FFf459854ca91318274E47F4eEE245CF28', symbol: 'XRP' },
-  { address: '0x86B5bd6FFf459854ca91318274E47F4eEGH45SV23', symbol: 'ETH' },
-  // 后续可加更多
+  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTokenA' },
+  { address: '0x5A4eA3a013D42Cfd1B1609d19f6eA998EeE06D30', symbol: 'MNTokenB' },
+  { address: '0x86B5df6FF459854ca91318274E47F4eEE245CF28', symbol: 'MNTokenC' },
+  { address: '0x7af86B1034AC4C925Ef5C3F637D1092310d83F03', symbol: 'MNTokenD' },
 ];
 
 export const PositionPage = () => {
   const chainId = useChainId(); // 项目wagmi配置的链 id
-  const { isConnected, chainId: curChainId } = useAccount(); // 当前钱包连接状态
+  const { address: account, isConnected, chainId: curChainId } = useAccount(); // 当前钱包连接状态
   const isChainidMatch = curChainId === chainId;
+  const positionManagerAddress = getContractAddress(chainId, 'PositionManager');
+  const poolManagerAddress = getContractAddress(chainId, 'PoolManager');
 
   const [openAddPosition, setOpenAddPosition] = useState(false);
+  const [addPositonError, setAddPositonError] = useState<string>('');
 
   const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
   const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
-  const [fee, setFee] = useState<number>();
+  const [addPositionFee, setAddPositionFee] = useState<number>(0);
+
+  const { isApproved, ensureApproved } = usePositionApproval();
 
   const {
     data: positions,
@@ -65,7 +49,7 @@ export const PositionPage = () => {
     error,
     refetch,
   } = useReadContract({
-    address: getContractAddress(chainId, 'PositionManager'),
+    address: positionManagerAddress,
     abi: positionAbi,
     functionName: 'getAllPositions',
     query: {
@@ -73,52 +57,166 @@ export const PositionPage = () => {
     },
   });
 
-  // isPending：等待用户在钱包确认。
-  // txHash：交易已提交后的 tx 哈希。
-  // error： 用户拒绝 / 模拟失败等错误
-  const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract();
+  const myaccount = '0x2130DF4D9489534a5E5b8f995F81AD2151b5EA7c';
+  const myaccount1 = '0xb975c82cafF9Fd068326b0Df0eD0eA0d839f24b4';
+  const myPositions = positions
+    ? positions.filter((p: Position) => p.owner === myaccount1 || p.owner === myaccount)
+    : [];
 
-  // 等待交易上链确认
-  // isLoading：已发出但还未确认（等出块）
-  // isSuccess： 交易已成功上链
-  // isError： 交易失败 / 被回滚
-  const {
-    isLoading: isConfirming,
-    isSuccess: isConfirmed,
-    isError,
-  } = useWaitForTransactionReceipt({
-    hash: txHash,
+  const myTokensAddrs = useMemo(() => {
+    const set = new Set<`0x${string}`>();
+    myPositions?.forEach((p: Position) => {
+      set.add(p.token0);
+      set.add(p.token1);
+    });
+    return [...set];
+  }, [myPositions]);
+  const { tokenMap } = useTokenInfos(myTokensAddrs);
+
+  // 获取所有 pairs交易对
+  const { data: pairs } = useReadContract({
+    address: poolManagerAddress,
+    abi: poolAbi,
+    functionName: 'getPairs',
     query: {
-      enabled: !!txHash,
+      enabled: isConnected && !!chainId && isChainidMatch,
     },
   });
 
-  // 交易确认后自动刷新列表
-  useEffect(() => {
-    if (isConfirmed) {
-      refetch();
-    }
-  }, [isConfirmed, refetch]);
+  // 获取所有 pools
+  const { data: pools } = useReadContract({
+    address: poolManagerAddress,
+    abi: poolAbi,
+    functionName: 'getAllPools',
+    query: {
+      enabled: isConnected && !!chainId && isChainidMatch,
+    },
+  });
 
-  const handleRemove = (row: Position) => {
-    writeContract({
-      address: getContractAddress(chainId, 'PositionManager'),
-      abi: positionAbi,
-      functionName: 'burn',
-      args: [row.id],
+  //根据token0和token1获取fee：add position弹窗选定 token0 和 token1 两个下拉框，费率会自动显示。
+  const getCurFee = () => {
+    const inAddr = tokenIn.address.toLowerCase();
+    const outAddr = tokenOut.address.toLowerCase();
+    const curPool = pools?.find((p: Pool) => {
+      const p0 = p.token0.toLowerCase();
+      const p1 = p.token1.toLowerCase();
+      return (p0 === inAddr && p1 === outAddr) || (p0 === outAddr && p1 === inAddr);
     });
-
-    console.log('remove position：', row);
-    console.log('txhash isPending writeError：', txHash, isPending, writeError);
-    console.log('isConfirming isSuccess isError：', isConfirming, isConfirmed, isError);
+    setAddPositionFee(curPool?.fee ?? 0);
   };
 
-  const handleCollect = (row: Position) => {
-    console.log('collect position', row);
+  // 发送写交易（手动 await，便于区分操作行与捕获错误）
+  const { writeContractAsync } = useWriteContract();
+
+  // 表中最后一列actions当前正在处理的行为操作类型（用于区分每一行、每个按钮的 loading 态）
+  const [processing, setProcessing] = useState<{ id: bigint; action: 'remove' | 'collect' } | null>(
+    null
+  );
+  // 最近一次操作的错误信息
+  const [actionError, setActionError] = useState<string>();
+
+  const handleRemove = async (row: Position) => {
+    if (row.liquidity !== 0n) {
+      alert('please collect first');
+      return;
+    }
+    setActionError(undefined);
+    setProcessing({ id: row.id, action: 'remove' });
+    try {
+      // 1. 确保已授权（usePositionApproval内部完成：读取最新状态 → 模拟 → 发送 → 等待上链 → 刷新状态）
+      const approved = await ensureApproved();
+      if (!approved) throw new Error('Approval not completed');
+
+      // 2. 先模拟交易、校验、拿 request，发现错误立即报，不花 gas
+      const { request } = await simulateContract(wagmiConfig, {
+        address: positionManagerAddress,
+        abi: positionAbi,
+        functionName: 'burn',
+        args: [row.id],
+      });
+
+      // 3. 模拟成功，发送交易并等待上链
+      const hash = await writeContractAsync(request);
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+
+      // 4. 成功后刷新列表
+      await refetch();
+    } catch (error: unknown) {
+      const msg =
+        (error as { shortMessage?: string; message?: string })?.shortMessage ||
+        (error as Error)?.message ||
+        'Remove failed';
+      console.error('Remove failed:', error);
+      setActionError(msg);
+    } finally {
+      setProcessing(null);
+    }
   };
 
-  const handleAddPosition = () => {
-    console.log('add position');
+  const handleCollect = async (row: Position) => {
+    if (!account) return;
+    setActionError(undefined);
+    setProcessing({ id: row.id, action: 'collect' });
+    try {
+      const { request } = await simulateContract(wagmiConfig, {
+        address: positionManagerAddress,
+        abi: positionAbi,
+        functionName: 'collect',
+        args: [row.id, account],
+      });
+      const hash = await writeContractAsync(request);
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+      await refetch();
+    } catch (error: unknown) {
+      const msg =
+        (error as { shortMessage?: string; message?: string })?.shortMessage ||
+        (error as Error)?.message ||
+        'Collect failed';
+      console.error('Collect failed:', error);
+      setActionError(msg);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleAddPosition = async () => {
+    setAddPositonError('');
+    if (!account) return;
+    if (addPositionFee === undefined) return;
+    if (!amountIn || !amountOut) {
+      setAddPositonError('Please enter both amounts');
+      return;
+    }
+
+    try {
+      const hash = await writeContractAsync({
+        address: positionManagerAddress,
+        abi: positionAbi,
+        functionName: 'mint',
+        args: [
+          {
+            token0: tokenIn.address,
+            token1: tokenOut.address,
+            index,
+            amount0Desired: formatToBigInt(amountIn),
+            amount1Desired: formatToBigInt(amountOut),
+            recipient: account,
+            deadline: formatToBigInt(Math.floor(Date.now() / 1000) + 60 * 30),
+          },
+        ],
+      });
+
+      // 等上链
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+      setOpenAddPosition(false);
+      refetch();
+    } catch (error: unknown) {
+      const message =
+        (error as { shortMessage?: string; message?: string })?.shortMessage ||
+        (error as Error)?.message ||
+        'Add position failed';
+      setAddPositonError(message);
+    }
   };
 
   //用一个 state 统一管理"哪个输入框正在选 token"
@@ -127,8 +225,8 @@ export const PositionPage = () => {
     selecting === Selecting.In ? tokenIn : selecting === Selecting.Out ? tokenOut : undefined;
 
   // tokens 弹窗选中 token 时触发
-  // 如果选中的是另一边的 token，自动交换。（也可传disabledAddresses，禁选另一边的token）
   const handleSelectToken = (token: TokenInfo) => {
+    // 如果选中的是另一边的 token，自动交换。（也可传disabledAddresses，禁选另一边的token）
     if (selecting === Selecting.In) {
       //如： 用户在 In 选了 XRP，但 Out 已经是 XRP，就把 Out 设为旧的 In（ETH），变成"交换两边"
       if (token.address.toLowerCase() === tokenOut.address.toLowerCase()) {
@@ -141,13 +239,14 @@ export const PositionPage = () => {
       }
       setTokenOut(token);
     }
+    getCurFee();
   };
 
   const columns: Column<Position>[] = [
     {
       key: 'token',
       label: 'Token',
-      render: row => `${shortAddress(row.token0)} / ${shortAddress(row.token1)}`,
+      render: row => <TokenPair token0={row.token0} token1={row.token1} tokenMap={tokenMap} />,
     },
     {
       key: 'fee',
@@ -159,11 +258,17 @@ export const PositionPage = () => {
       label: 'Set price range',
       render: row => formatPriceRange(row.tickLower, row.tickUpper),
     },
-    // {
-    //     key:'price',
-    //     label:'Current price',
-    //     render:(row) => sqrtPriceX96ToPrice(row.sqrtPriceX96).toFixed(3),
-    // },
+    {
+      key: 'price',
+      label: 'Current price',
+      render: row => {
+        const sqrtPriceX96 =
+          pools?.find(
+            p => p.token0 === row.token0 && p.token1 === row.token1 && p.index === row.index
+          )?.sqrtPriceX96 ?? 0n;
+        return sqrtPriceX96 ? sqrtPriceX96ToPrice(sqrtPriceX96).toFixed(3) : '0.000';
+      },
+    },
     {
       key: 'index',
       label: 'index',
@@ -177,24 +282,30 @@ export const PositionPage = () => {
     {
       key: 'actions',
       label: 'Actions',
-      render: row => (
-        <div className="flex items-center gap-2">
-          <button
-            disabled={isPending || isConfirming}
-            className="text-blue-600 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => handleRemove(row)}
-          >
-            {isPending ? 'Pending...' : isConfirming ? 'Confirming...' : 'Remove'}
-          </button>
-          <button
-            disabled={isPending || isConfirming}
-            className="text-blue-600 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => handleCollect(row)}
-          >
-            Collect
-          </button>
-        </div>
-      ),
+      render: row => {
+        // 仅当前操作的行进入 loading，避免全局串扰
+        const isRemoving = processing?.id === row.id && processing.action === 'remove';
+        const isCollecting = processing?.id === row.id && processing.action === 'collect';
+        const anyProcessing = processing !== null;
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              disabled={anyProcessing}
+              className="text-blue-600 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handleRemove(row)}
+            >
+              {isRemoving ? (isApproved ? 'Removing...' : 'Approving...') : 'Remove'}
+            </button>
+            <button
+              disabled={anyProcessing}
+              className="text-blue-600 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handleCollect(row)}
+            >
+              {isCollecting ? 'Collecting...' : 'Collect'}
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -215,13 +326,22 @@ export const PositionPage = () => {
       <div className="max-w-7xl mx-auto">
         <p className="text-2xl font-semibold text-gray-900 mb-2 text-center py-2">Positions</p>
 
+        {actionError && (
+          <div className="mb-3 rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-600">
+            {actionError}
+          </div>
+        )}
+
         <DataTable<Position>
           title="My Positions"
           extra={
             <>
               <button
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                onClick={() => setOpenAddPosition(true)}
+                onClick={() => {
+                  setOpenAddPosition(true);
+                  getCurFee();
+                }}
               >
                 Add Position
               </button>
@@ -232,7 +352,7 @@ export const PositionPage = () => {
                 footer={
                   <ModalFooter
                     onClose={() => setOpenAddPosition(false)}
-                    handleAddClick={() => handleAddPosition()}
+                    handleAddClick={handleAddPosition}
                   />
                 }
               >
@@ -273,12 +393,17 @@ export const PositionPage = () => {
                 <p className="text-sm pt-3 pb-1">
                   <span className="text-red-500">*</span>Fee tier
                 </p>
-                <FeeTierSelect disabled={!tokenIn || !tokenOut} value={fee} onChange={setFee} />
+                <p className="text-center">{addPositionFee}</p>
+                {/* <FeeTierSelect disabled={!tokenIn || !tokenOut} value={addPositionFee} onChange={setAddPositionFee} /> */}
+
+                {addPositonError ? (
+                  <p className="text-red-500 p-2 text-sm">{addPositonError}</p>
+                ) : null}
               </Modal>
             </>
           }
           columns={columns}
-          data={positions as Position[] | undefined}
+          data={myPositions as Position[] | undefined}
           loading={isLoading}
           error={error}
         />

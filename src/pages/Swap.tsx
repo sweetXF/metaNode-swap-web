@@ -1,19 +1,15 @@
 import { useState } from 'react';
 import { AmountInput, type TokenInfo } from '../components/AmountInput';
 import { TokenList } from '../components/TokenList';
+import { Selecting } from '../config/types';
 
 // 临时硬编码 token（后续应该从 token 列表取）
 const TOKEN_LIST: TokenInfo[] = [
-  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTA' },
-  { address: '0x86B5bd6FFf459854ca91318274E47F4eEE245CF28', symbol: 'XRP' },
-  { address: '0x86B5bd6FFf459854ca91318274E47F4eEGH45SV23', symbol: 'ETH' },
-  // 后续可加更多
+  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTokenA' },
+  { address: '0x5A4eA3a013D42Cfd1B1609d19f6eA998EeE06D30', symbol: 'MNTokenB' },
+  { address: '0x86B5df6FF459854ca91318274E47F4eEE245CF28', symbol: 'MNTokenC' },
+  { address: '0x7af86B1034AC4C925Ef5C3F637D1092310d83F03', symbol: 'MNTokenD' },
 ];
-
-enum Selecting {
-  In,
-  Out,
-}
 
 export const SwapPage = () => {
   const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
