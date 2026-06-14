@@ -248,14 +248,16 @@ export const PoolPage = () => {
                     amount={amountIn}
                     onAmountChange={setAmountIn}
                     onTokenSelect={() => setSelecting(Selecting.In)}
-                    showMax
+                    showBalance={false}
+                    readOnly
                   />
                   <AmountInput
                     token={tokenOut}
                     amount={amountOut}
                     onAmountChange={setAmountOut}
                     onTokenSelect={() => setSelecting(Selecting.Out)}
-                    // readOnly
+                    showBalance={false}
+                    readOnly
                   />
                 </div>
 

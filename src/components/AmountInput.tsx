@@ -13,8 +13,9 @@ interface AmountInputProps {
   amount: string; // 输入金额
   onAmountChange: (value: string) => void;
   onTokenSelect?: () => void; //点 token 选择器时触发:弹出 token 列表
+  showBalance?: boolean; //是否显示余额
   showMax?: boolean; //是否显示 Max 按钮（点击后amount是最大值，全部都卖出）
-  readOnly?: boolean; //是否只读(一框输入，另一框只读显示报价)
+  readOnly?: boolean; //是否只读
   USDValue?: string | number; //美元估值
 }
 
@@ -24,8 +25,9 @@ export const AmountInput = ({
   onAmountChange,
   onTokenSelect,
   showMax = false,
+  showBalance = true,
   readOnly = false,
-  USDValue = '0.00',
+  USDValue,
 }: AmountInputProps) => {
   const tokenAddrs = useMemo(() => {
     return token ? [{ token: token.address }] : [];
@@ -70,7 +72,7 @@ export const AmountInput = ({
           value={amount}
           onChange={handleInput}
           readOnly={readOnly}
-          placeholder="0"
+          placeholder={readOnly ? 'no' : '0'}
           className="flex-1 min-w-0 bg-transparent text-3xl font-medium outline-none placeholder:text-gray-300"
         />
 
@@ -85,9 +87,9 @@ export const AmountInput = ({
       </div>
 
       <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-        <span>${USDValue}</span>
+        {USDValue && <span>${USDValue}</span>}
         <div className="flex items-center gap-1">
-          <span>Balance: {balanceStr}</span>
+          {showBalance && <span>Balance: {balanceStr}</span>}
           {showMax && balanceRaw !== undefined && (
             <button
               type="button"
