@@ -28,7 +28,7 @@ export const AmountInput = ({
   USDValue = '0.00',
 }: AmountInputProps) => {
   const tokenAddrs = useMemo(() => {
-    return token ? [token.address] : [];
+    return token ? [{ token: token.address }] : [];
   }, [token]);
 
   const { tokenMap } = useTokenInfos(tokenAddrs);

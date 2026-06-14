@@ -23,8 +23,6 @@ import { TokenList } from '../components/TokenList';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
 import { Selecting, type Pool } from '../config/types';
-import { usePoolTokenInfos } from '../hooks/usePoolTokenInfos';
-import { usePoolTokens } from '../hooks/usePoolTokens';
 
 // 临时硬编码 token（后续应该从 token 列表取）
 const TOKEN_LIST: TokenInfo[] = [
@@ -68,9 +66,16 @@ export const PoolPage = () => {
     },
   });
 
-  const { allTokenAddrs } = usePoolTokens();
+  // 每个池子 → 两个 (token, holder) pair
+  const poolTokenInfos = useMemo(() => {
+    if (!pools) return [];
+    return pools.flatMap((p: Pool) => [
+      { token: p.token0, holder: p.pool },
+      { token: p.token1, holder: p.pool },
+    ]);
+  }, [pools]);
 
-  const { tokenMap } = useTokenInfos(allTokenAddrs);
+  const { tokenMap, isTokenInfoLoading } = useTokenInfos(poolTokenInfos);
 
   const { writeContractAsync } = useWriteContract();
 
@@ -80,7 +85,7 @@ export const PoolPage = () => {
     return pools?.find((pool: Pool) => {
       const p0 = pool.token0;
       const p1 = pool.token1;
-      return p0 === inAddr && p1 === outAddr;
+      return (p0 === inAddr && p1 === outAddr) || (p0 === outAddr && p1 === inAddr);
     });
   }, [pools, tokenIn, tokenOut]);
 
@@ -314,7 +319,7 @@ export const PoolPage = () => {
           }
           columns={columns}
           data={pools as Pool[] | undefined}
-          loading={isLoading}
+          loading={isLoading || isTokenInfoLoading}
           error={error}
         />
       </div>

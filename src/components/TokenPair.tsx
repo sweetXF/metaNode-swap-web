@@ -3,7 +3,10 @@ import { formatBigInt } from '../utils/format';
 interface TokenPairProps {
   token0: `0x${string}`;
   token1: `0x${string}`;
-  tokenMap: Map<string, { symbol: string; decimals: number; balance: bigint }>;
+  tokenMap: Map<
+    string,
+    { symbol: string; decimals: number; balance?: bigint; owner?: `0x${string}` }
+  >;
 }
 
 export const TokenPair = ({ token0, token1, tokenMap }: TokenPairProps) => {

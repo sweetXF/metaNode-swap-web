@@ -64,15 +64,16 @@ export const PositionPage = () => {
     ? positions.filter((p: Position) => p.owner === myaccount1 || p.owner === myaccount)
     : [];
 
-  const myTokensAddrs = useMemo(() => {
-    const set = new Set<`0x${string}`>();
-    myPositions?.forEach((p: Position) => {
-      set.add(p.token0);
-      set.add(p.token1);
-    });
-    return [...set];
+  // 仓位池子 → 两个 (token, holder) pair
+  const positionTokenInfos = useMemo(() => {
+    if (!myPositions) return [];
+    return myPositions.flatMap((p: Position) => [
+      { token: p.token0, holder: p.owner },
+      { token: p.token1, holder: p.owner },
+    ]);
   }, [myPositions]);
-  const { tokenMap } = useTokenInfos(myTokensAddrs);
+
+  const { tokenMap } = useTokenInfos(positionTokenInfos);
 
   // 获取所有 pools
   const { data: pools } = useReadContract({

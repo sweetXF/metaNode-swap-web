@@ -19,6 +19,7 @@ export const usePoolTokens = () => {
 
   // 获取所有 token 地址（去重）
   const allTokenAddrs = useMemo(() => {
+    if (!pairs) return [];
     const set = new Set<`0x${string}`>();
     pairs?.forEach(p => {
       set.add(p.token0);
