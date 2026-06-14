@@ -23,6 +23,8 @@ import { TokenList } from '../components/TokenList';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
 import { Selecting, type Pool } from '../config/types';
+import { usePoolTokenInfos } from '../hooks/usePoolTokenInfos';
+import { usePoolTokens } from '../hooks/usePoolTokens';
 
 // 临时硬编码 token（后续应该从 token 列表取）
 const TOKEN_LIST: TokenInfo[] = [
@@ -47,7 +49,7 @@ export const PoolPage = () => {
   const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
-  const [fee, setFee] = useState('3000');
+  const [fee, setFee] = useState('');
   const [lowPrice, setLowPrice] = useState('');
   const [highPrice, setHighPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
@@ -66,19 +68,21 @@ export const PoolPage = () => {
     },
   });
 
-  // 收集所有不重复的 token 地址
-  const allTokenAddrs = useMemo(() => {
-    const set = new Set<`0x${string}`>();
-    pools?.forEach((pool: Pool) => {
-      set.add(pool.token0);
-      set.add(pool.token1);
-    });
-    return [...set];
-  }, [pools]);
+  const { allTokenAddrs } = usePoolTokens();
 
   const { tokenMap } = useTokenInfos(allTokenAddrs);
 
   const { writeContractAsync } = useWriteContract();
+
+  const curPool = useMemo(() => {
+    const inAddr = tokenIn.address;
+    const outAddr = tokenOut.address;
+    return pools?.find((pool: Pool) => {
+      const p0 = pool.token0;
+      const p1 = pool.token1;
+      return p0 === inAddr && p1 === outAddr;
+    });
+  }, [pools, tokenIn, tokenOut]);
 
   const handleAddPool = async () => {
     setAddPoolError('');
@@ -93,6 +97,11 @@ export const PoolPage = () => {
     }
     if (!currentPrice) {
       setAddPoolError('Please enter current price');
+      return;
+    }
+
+    if (curPool) {
+      setAddPoolError('Pool already exists');
       return;
     }
 
@@ -136,12 +145,12 @@ export const PoolPage = () => {
   const handleSelectToken = (token: TokenInfo) => {
     if (selecting === Selecting.In) {
       //如： 用户在 In 选了 XRP，但 Out 已经是 XRP，就把 Out 设为旧的 In（ETH），变成"交换两边"
-      if (token.address.toLowerCase() === tokenOut.address.toLowerCase()) {
+      if (token.address === tokenOut.address) {
         setTokenOut(tokenIn);
       }
       setTokenIn(token);
     } else if (selecting === Selecting.Out) {
-      if (token.address.toLowerCase() === tokenIn.address.toLowerCase()) {
+      if (token.address === tokenIn.address) {
         setTokenIn(tokenOut);
       }
       setTokenOut(token);
@@ -176,6 +185,11 @@ export const PoolPage = () => {
       label: 'Liquidity',
       render: row => formatBigInt(row.liquidity),
     },
+    {
+      key: 'pool',
+      label: 'Pool',
+      render: row => shortAddress(row.pool),
+    },
   ];
 
   return (
@@ -198,6 +212,7 @@ export const PoolPage = () => {
               <button
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
                 onClick={() => {
+                  setAddPoolError('');
                   if (!isConnected || !isChainidMatch) {
                     alert('Please connect your wallet to Sepolia network');
                     return;

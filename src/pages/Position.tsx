@@ -40,6 +40,7 @@ export const PositionPage = () => {
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
   const [addPositionFee, setAddPositionFee] = useState<number>(0);
+  const [poolIndex, setPoolIndex] = useState<number>();
 
   const { isApproved, ensureApproved } = usePositionApproval();
 
@@ -73,16 +74,6 @@ export const PositionPage = () => {
   }, [myPositions]);
   const { tokenMap } = useTokenInfos(myTokensAddrs);
 
-  // 获取所有 pairs交易对
-  const { data: pairs } = useReadContract({
-    address: poolManagerAddress,
-    abi: poolAbi,
-    functionName: 'getPairs',
-    query: {
-      enabled: isConnected && !!chainId && isChainidMatch,
-    },
-  });
-
   // 获取所有 pools
   const { data: pools } = useReadContract({
     address: poolManagerAddress,
@@ -94,14 +85,15 @@ export const PositionPage = () => {
   });
 
   //根据token0和token1获取fee：add position弹窗选定 token0 和 token1 两个下拉框，费率会自动显示。
-  const getCurFee = () => {
-    const inAddr = tokenIn.address.toLowerCase();
-    const outAddr = tokenOut.address.toLowerCase();
+  const getCurPool = () => {
+    const inAddr = tokenIn.address;
+    const outAddr = tokenOut.address;
     const curPool = pools?.find((p: Pool) => {
-      const p0 = p.token0.toLowerCase();
-      const p1 = p.token1.toLowerCase();
+      const p0 = p.token0;
+      const p1 = p.token1;
       return (p0 === inAddr && p1 === outAddr) || (p0 === outAddr && p1 === inAddr);
     });
+    setPoolIndex(curPool?.index);
     setAddPositionFee(curPool?.fee ?? 0);
   };
 
@@ -182,7 +174,7 @@ export const PositionPage = () => {
   const handleAddPosition = async () => {
     setAddPositonError('');
     if (!account) return;
-    if (addPositionFee === undefined) return;
+    if (addPositionFee === undefined || poolIndex === undefined) return;
     if (!amountIn || !amountOut) {
       setAddPositonError('Please enter both amounts');
       return;
@@ -197,7 +189,7 @@ export const PositionPage = () => {
           {
             token0: tokenIn.address,
             token1: tokenOut.address,
-            index,
+            index: poolIndex,
             amount0Desired: formatToBigInt(amountIn),
             amount1Desired: formatToBigInt(amountOut),
             recipient: account,
@@ -229,17 +221,17 @@ export const PositionPage = () => {
     // 如果选中的是另一边的 token，自动交换。（也可传disabledAddresses，禁选另一边的token）
     if (selecting === Selecting.In) {
       //如： 用户在 In 选了 XRP，但 Out 已经是 XRP，就把 Out 设为旧的 In（ETH），变成"交换两边"
-      if (token.address.toLowerCase() === tokenOut.address.toLowerCase()) {
+      if (token.address === tokenOut.address) {
         setTokenOut(tokenIn);
       }
       setTokenIn(token);
     } else if (selecting === Selecting.Out) {
-      if (token.address.toLowerCase() === tokenIn.address.toLowerCase()) {
+      if (token.address === tokenIn.address) {
         setTokenIn(tokenOut);
       }
       setTokenOut(token);
     }
-    getCurFee();
+    getCurPool();
   };
 
   const columns: Column<Position>[] = [
@@ -340,7 +332,7 @@ export const PositionPage = () => {
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
                 onClick={() => {
                   setOpenAddPosition(true);
-                  getCurFee();
+                  getCurPool();
                 }}
               >
                 Add Position
