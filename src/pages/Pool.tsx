@@ -45,8 +45,8 @@ export const PoolPage = () => {
 
   const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
   const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
-  const [amountIn, setAmountIn] = useState('');
-  const [amountOut, setAmountOut] = useState('');
+  // const [amountIn, setAmountIn] = useState('');
+  // const [amountOut, setAmountOut] = useState('');
   const [fee, setFee] = useState('');
   const [lowPrice, setLowPrice] = useState('');
   const [highPrice, setHighPrice] = useState('');
@@ -77,25 +77,33 @@ export const PoolPage = () => {
 
   const { tokenMap, isTokenInfoLoading } = useTokenInfos(poolTokenInfos);
 
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
 
-  const curPool = useMemo(() => {
+  const curAddPool = useMemo(() => {
     const inAddr = tokenIn.address;
     const outAddr = tokenOut.address;
     return pools?.find((pool: Pool) => {
       const p0 = pool.token0;
       const p1 = pool.token1;
-      return (p0 === inAddr && p1 === outAddr) || (p0 === outAddr && p1 === inAddr);
+      return (
+        ((p0 === inAddr && p1 === outAddr) || (p0 === outAddr && p1 === inAddr)) &&
+        pool.fee === Number(fee) &&
+        pool.tickLower === priceToTick(lowPrice) &&
+        pool.tickUpper === priceToTick(highPrice)
+      );
     });
-  }, [pools, tokenIn, tokenOut]);
+  }, [pools, tokenIn, tokenOut, fee, lowPrice, highPrice]);
 
   const handleAddPool = async () => {
     setAddPoolError('');
-    if (fee === undefined) return;
-    if (!amountIn || !amountOut) {
-      setAddPoolError('Please enter both amounts');
+    if (!fee) {
+      setAddPoolError('Please enter fee');
       return;
     }
+    // if (!amountIn || !amountOut) {
+    //   setAddPoolError('Please enter both amounts');
+    //   return;
+    // }
     if (!lowPrice || !highPrice) {
       setAddPoolError('Please enter low and high price');
       return;
@@ -104,8 +112,12 @@ export const PoolPage = () => {
       setAddPoolError('Please enter current price');
       return;
     }
+    if (+currentPrice < +lowPrice || +currentPrice > +highPrice) {
+      setAddPoolError('Current price must be between low and high price');
+      return;
+    }
 
-    if (curPool) {
+    if (curAddPool) {
       setAddPoolError('Pool already exists');
       return;
     }
@@ -119,8 +131,8 @@ export const PoolPage = () => {
           {
             token0: tokenIn.address,
             token1: tokenOut.address,
-            fee: Number(fee),
-            tickLower: priceToTick(lowPrice),
+            fee: Number(fee), //uint24
+            tickLower: priceToTick(lowPrice), //int24
             tickUpper: priceToTick(highPrice),
             sqrtPriceX96: priceToSqrtPriceX96(currentPrice),
           },
@@ -236,6 +248,7 @@ export const PoolPage = () => {
                   <ModalFooter
                     onClose={() => setOpenAddPool(false)}
                     handleAddClick={handleAddPool}
+                    isConfirming={isPending}
                   />
                 }
               >
@@ -245,16 +258,16 @@ export const PoolPage = () => {
                 <div className="space-y-1">
                   <AmountInput
                     token={tokenIn}
-                    amount={amountIn}
-                    onAmountChange={setAmountIn}
+                    // amount={amountIn}
+                    // onAmountChange={setAmountIn}
                     onTokenSelect={() => setSelecting(Selecting.In)}
                     showBalance={false}
                     readOnly
                   />
                   <AmountInput
                     token={tokenOut}
-                    amount={amountOut}
-                    onAmountChange={setAmountOut}
+                    // amount={amountOut}
+                    // onAmountChange={setAmountOut}
                     onTokenSelect={() => setSelecting(Selecting.Out)}
                     showBalance={false}
                     readOnly

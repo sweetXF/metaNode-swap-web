@@ -10,8 +10,8 @@ export interface TokenInfo {
 
 interface AmountInputProps {
   token?: TokenInfo; // 当前选中的 token
-  amount: string; // 输入金额
-  onAmountChange: (value: string) => void;
+  amount?: string; // 输入金额
+  onAmountChange?: (value: string) => void;
   onTokenSelect?: () => void; //点 token 选择器时触发:弹出 token 列表
   showBalance?: boolean; //是否显示余额
   showMax?: boolean; //是否显示 Max 按钮（点击后amount是最大值，全部都卖出）
@@ -49,7 +49,7 @@ export const AmountInput = ({
 
   const handleMax = () => {
     if (balanceRaw === undefined) return;
-    onAmountChange(formatUnits(balanceRaw, decimals));
+    if (onAmountChange) onAmountChange(formatUnits(balanceRaw, decimals));
   };
 
   // 优化输入：只保留 1 个小数点、纯数字+小数点
@@ -60,7 +60,7 @@ export const AmountInput = ({
     if (dotCount > 1) val = val.slice(0, val.lastIndexOf('.'));
     // 禁止开头为 .
     if (val.startsWith('.')) val = val.slice(1);
-    onAmountChange(val);
+    if (onAmountChange) onAmountChange(val);
   };
 
   return (
