@@ -26,7 +26,7 @@ export const useTokenInfos = (pairs: TokenHolderPair[]) => {
   //token address  -> { symbol, decimals, balance, owner}
   const tokenMap = useMemo(() => {
     const m = new Map<
-      string,
+      `0x${string}`,
       { symbol: string; decimals: number; balance?: bigint; owner?: `0x${string}` }
     >();
     pairs.forEach(({ token, holder }, i) => {
@@ -34,7 +34,7 @@ export const useTokenInfos = (pairs: TokenHolderPair[]) => {
       const symbol = data?.[i * 3]?.result as string;
       const decimals = (data?.[i * 3 + 1]?.result as number) ?? 18;
       const balance = owner ? ((data?.[i * 3 + 2]?.result as bigint) ?? 0n) : undefined;
-      const key = `${token}`;
+      const key = `${token}` as `0x${string}`;
       m.set(key, { symbol, decimals, balance, owner });
     });
     return m;

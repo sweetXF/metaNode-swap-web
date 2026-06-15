@@ -1,4 +1,4 @@
-import { formatBigInt } from '../utils/format';
+import { formatBigInt, shortAddress } from '../utils/format';
 
 interface TokenPairProps {
   token0: `0x${string}`;
@@ -15,12 +15,12 @@ export const TokenPair = ({ token0, token1, tokenMap }: TokenPairProps) => {
 
   return (
     <span>
-      <span className="font-medium">{token0Info?.symbol ?? '?'}</span>
+      <span className="font-medium">{token0Info?.symbol ?? shortAddress(token0)}</span>
       <span className="text-gray-400 ml-1">
         ({formatBigInt(token0Info?.balance, token0Info?.decimals)})
       </span>
       <span className="mx-2 text-gray-400"> / </span>
-      <span className="font-medium">{token1Info?.symbol ?? '?'}</span>
+      <span className="font-medium">{token1Info?.symbol ?? shortAddress(token1)}</span>
       <span className="text-gray-400 ml-1">
         ({formatBigInt(token1Info?.balance, token1Info?.decimals)})
       </span>

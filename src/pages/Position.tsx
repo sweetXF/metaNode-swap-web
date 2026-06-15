@@ -7,7 +7,7 @@ import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from '../utils/p
 import { useMemo, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { ModalFooter } from '../components/ModalFooter';
-import { AmountInput, type TokenInfo } from '../components/AmountInput';
+import { AmountInput } from '../components/AmountInput';
 import { TokenList } from '../components/TokenList';
 import { wagmiConfig } from '../wagmi';
 import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
@@ -15,15 +15,8 @@ import { usePositionApproval } from '../hooks/usePositionApproval';
 import { poolAbi } from '../abi/PoolManager';
 import { TokenPair } from '../components/TokenPair';
 import { useTokenInfos } from '../hooks/useTokenInfos';
-import { Selecting, type Pool, type Position } from '../config/types';
-
-// 临时硬编码 token（后续应该从 token 列表取）
-const TOKEN_LIST: TokenInfo[] = [
-  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTokenA' },
-  { address: '0x5A4eA3a013D42Cfd1B1609d19f6eA998EeE06D30', symbol: 'MNTokenB' },
-  { address: '0x86B5df6FF459854ca91318274E47F4eEE245CF28', symbol: 'MNTokenC' },
-  { address: '0x7af86B1034AC4C925Ef5C3F637D1092310d83F03', symbol: 'MNTokenD' },
-];
+import { Selecting, type Pool, type Position, type TokenInfo } from '../config/types';
+import { useTokenList } from '../hooks/useTokenList';
 
 export const PositionPage = () => {
   const chainId = useChainId(); // 项目wagmi配置的链 id
@@ -35,8 +28,9 @@ export const PositionPage = () => {
   const [openAddPosition, setOpenAddPosition] = useState(false);
   const [addPositonError, setAddPositonError] = useState<string>('');
 
-  const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
-  const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
+  const { tokenList } = useTokenList();
+  const [tokenIn, setTokenIn] = useState<TokenInfo>(tokenList[0]);
+  const [tokenOut, setTokenOut] = useState<TokenInfo>(tokenList[1]);
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
   const [addPositionFee, setAddPositionFee] = useState<number>(0);
@@ -371,7 +365,7 @@ export const PositionPage = () => {
 
                 {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
                 <TokenList
-                  tokens={TOKEN_LIST}
+                  tokens={tokenList}
                   open={selecting !== undefined}
                   onClose={() => setSelecting(undefined)}
                   onSelect={handleSelectToken}

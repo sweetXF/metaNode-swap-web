@@ -1,5 +1,5 @@
+import type { TokenInfo } from '../config/types';
 import { shortAddress } from '../utils/format';
-import type { TokenInfo } from './AmountInput';
 import { Modal } from './Modal';
 
 interface TokenListProps {

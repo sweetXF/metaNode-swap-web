@@ -32,3 +32,11 @@ export enum Selecting {
   In,
   Out,
 }
+
+export type TokenInfo = {
+  address: `0x${string}`;
+  symbol?: string;
+  decimals?: number;
+  balance?: bigint;
+  owner?: `0x${string}`;
+};

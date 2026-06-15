@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AmountInput, type TokenInfo } from '../components/AmountInput';
+import { AmountInput } from '../components/AmountInput';
 import { TokenList } from '../components/TokenList';
-import { Selecting } from '../config/types';
+import { Selecting, type TokenInfo } from '../config/types';
 import { useAccount, useChainId, useWriteContract } from 'wagmi';
 import { usePositionApproval } from '../hooks/usePositionApproval';
 import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
@@ -11,14 +11,7 @@ import { swapRouterAbi } from '../abi/SwapRouter';
 import { formatBigInt, formatToBigInt } from '../utils/format';
 import { useDebounce } from '../hooks/useDebounce';
 import { formatUnits } from 'viem';
-
-// 临时硬编码 token（后续应该从 token 列表取）
-const TOKEN_LIST: TokenInfo[] = [
-  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTokenA' },
-  { address: '0x5A4eA3a013D42Cfd1B1609d19f6eA998EeE06D30', symbol: 'MNTokenB' },
-  { address: '0x86B5df6FF459854ca91318274E47F4eEE245CF28', symbol: 'MNTokenC' },
-  { address: '0x7af86B1034AC4C925Ef5C3F637D1092310d83F03', symbol: 'MNTokenD' },
-];
+import { useTokenList } from '../hooks/useTokenList';
 
 export const SwapPage = () => {
   const chainId = useChainId();
@@ -27,8 +20,9 @@ export const SwapPage = () => {
 
   const SwapRouterAddress = getContractAddress(chainId, 'SwapRouter');
 
-  const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
-  const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
+  const { tokenList } = useTokenList();
+  const [tokenIn, setTokenIn] = useState<TokenInfo>(tokenList[0]);
+  const [tokenOut, setTokenOut] = useState<TokenInfo>(tokenList[1]);
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
 
@@ -231,7 +225,7 @@ export const SwapPage = () => {
 
           {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
           <TokenList
-            tokens={TOKEN_LIST}
+            tokens={tokenList}
             open={selecting !== undefined}
             onClose={() => setSelecting(undefined)}
             onSelect={handleSelectToken}

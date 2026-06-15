@@ -1,12 +1,7 @@
 import { useMemo } from 'react';
 import { useTokenInfos } from '../hooks/useTokenInfos';
 import { formatUnits } from 'viem';
-
-export interface TokenInfo {
-  address: `0x${string}`;
-  symbol?: string;
-  decimals?: number;
-}
+import type { TokenInfo } from '../config/types';
 
 interface AmountInputProps {
   token?: TokenInfo; // 当前选中的 token

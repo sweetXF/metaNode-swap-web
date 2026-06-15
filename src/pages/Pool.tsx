@@ -16,21 +16,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../components/Modal';
 import { ModalFooter } from '../components/ModalFooter';
-import { AmountInput, type TokenInfo } from '../components/AmountInput';
+import { AmountInput } from '../components/AmountInput';
 import { FeeTierSelect } from '../components/FeeTierSelect';
 import { CellInput } from '../components/CellInput';
 import { TokenList } from '../components/TokenList';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
-import { Selecting, type Pool } from '../config/types';
-
-// 临时硬编码 token（后续应该从 token 列表取）
-const TOKEN_LIST: TokenInfo[] = [
-  { address: '0x4798388e3adE569570Df626040F07DF71135C48E', symbol: 'MNTokenA' },
-  { address: '0x5A4eA3a013D42Cfd1B1609d19f6eA998EeE06D30', symbol: 'MNTokenB' },
-  { address: '0x86B5df6FF459854ca91318274E47F4eEE245CF28', symbol: 'MNTokenC' },
-  { address: '0x7af86B1034AC4C925Ef5C3F637D1092310d83F03', symbol: 'MNTokenD' },
-];
+import { Selecting, type Pool, type TokenInfo } from '../config/types';
+import { useTokenList } from '../hooks/useTokenList';
 
 export const PoolPage = () => {
   const navigate = useNavigate();
@@ -43,8 +36,9 @@ export const PoolPage = () => {
   const [openAddPool, setOpenAddPool] = useState(false);
   const [addPoolError, setAddPoolError] = useState('');
 
-  const [tokenIn, setTokenIn] = useState<TokenInfo>(TOKEN_LIST[0]);
-  const [tokenOut, setTokenOut] = useState<TokenInfo>(TOKEN_LIST[1]);
+  const { tokenList } = useTokenList();
+  const [tokenIn, setTokenIn] = useState<TokenInfo>(tokenList[0]);
+  const [tokenOut, setTokenOut] = useState<TokenInfo>(tokenList[1]);
   // const [amountIn, setAmountIn] = useState('');
   // const [amountOut, setAmountOut] = useState('');
   const [fee, setFee] = useState('');
@@ -276,7 +270,7 @@ export const PoolPage = () => {
 
                 {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
                 <TokenList
-                  tokens={TOKEN_LIST}
+                  tokens={tokenList}
                   open={selecting !== undefined}
                   onClose={() => setSelecting(undefined)}
                   onSelect={handleSelectToken}
