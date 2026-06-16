@@ -21,10 +21,16 @@ export const SwapPage = () => {
   const SwapRouterAddress = getContractAddress(chainId, 'SwapRouter');
 
   const { tokenList } = useTokenList();
-  const [tokenIn, setTokenIn] = useState<TokenInfo>(tokenList[0]);
-  const [tokenOut, setTokenOut] = useState<TokenInfo>(tokenList[1]);
+  const [tokenIn, setTokenIn] = useState<TokenInfo>();
+  const [tokenOut, setTokenOut] = useState<TokenInfo>();
   const [amountIn, setAmountIn] = useState('');
   const [amountOut, setAmountOut] = useState('');
+
+  useEffect(() => {
+    if (tokenList.length < 2) return;
+    setTokenIn(prev => prev ?? tokenList[0]);
+    setTokenOut(prev => prev ?? tokenList[1]);
+  }, [tokenList]);
 
   const requestIdRef = useRef(0);
 
@@ -32,7 +38,7 @@ export const SwapPage = () => {
   type InputSource = 'in' | 'out' | null;
   const [inputSource, setInputSource] = useState<InputSource>(null);
 
-  const { isApproved, ensureApproved } = usePositionApproval();
+  // const { isApproved, ensureApproved } = usePositionApproval();
   const { writeContractAsync } = useWriteContract();
   const [swapError, setSwapError] = useState('');
 
@@ -44,6 +50,7 @@ export const SwapPage = () => {
   // tokens 弹窗选中 token 时触发
   // 如果选中的是另一边的 token，自动交换。（也可传disabledAddresses，禁选另一边的token）
   const handleSelectToken = (token: TokenInfo) => {
+    if (!tokenOut || !tokenIn) return;
     if (selecting === Selecting.In) {
       //如： 用户在 In 选了 XRP，但 Out 已经是 XRP，就把 Out 设为旧的 In（ETH），变成"交换两边"
       if (token.address === tokenOut.address) {
@@ -65,6 +72,7 @@ export const SwapPage = () => {
   // 正向询价 in -> out
   const fetchQuoteIn = useCallback(
     async (reqId: number) => {
+      if (!tokenIn || !tokenOut) return;
       const val = debouncedAmountIn;
       if (!val) {
         setAmountOut('');
@@ -115,6 +123,7 @@ export const SwapPage = () => {
   // 反向询价：out -> in
   const fetchQuoteOut = useCallback(
     async (reqId: number) => {
+      if (!tokenIn || !tokenOut) return;
       const val = debouncedAmountOut;
       // 空字符串：静默
       if (!val) {
@@ -192,6 +201,7 @@ export const SwapPage = () => {
     setAmountOut('');
     setAmountIn('');
     setSwapError('');
+    setInputSource(null);
   }, [tokenIn, tokenOut]);
 
   //  点击 Swap 按钮时触发

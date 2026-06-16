@@ -4,7 +4,7 @@ import { getContractAddress } from '../config/contracts';
 import { DataTable, type Column } from '../components/DataTable';
 import { TokenPair } from '../components/TokenPair';
 import { useTokenInfos } from '../hooks/useTokenInfos';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatBigInt, formatToBigInt } from '../utils/format';
 import {
   formatFeeTier,
@@ -40,12 +40,18 @@ export const PoolPage = () => {
   // Add pool
   const [openAddPool, setOpenAddPool] = useState(false);
   const [addPoolError, setAddPoolError] = useState('');
-  const [tokenIn, setTokenIn] = useState<TokenInfo>(tokenList[0]);
-  const [tokenOut, setTokenOut] = useState<TokenInfo>(tokenList[1]);
+  const [tokenIn, setTokenIn] = useState<TokenInfo>();
+  const [tokenOut, setTokenOut] = useState<TokenInfo>();
   const [fee, setFee] = useState('');
   const [lowPrice, setLowPrice] = useState('');
   const [highPrice, setHighPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
+
+  useEffect(() => {
+    if (tokenList.length < 2) return;
+    setTokenIn(prev => prev ?? tokenList[0]);
+    setTokenOut(prev => prev ?? tokenList[1]);
+  }, [tokenList]);
 
   // Add position
   const [processing, setProcessing] = useState<{ id: number } | null>(null);
@@ -88,6 +94,7 @@ export const PoolPage = () => {
 
   //用于add pool时判断是否已存在该池子
   const curAddPool = useMemo(() => {
+    if (!tokenIn || !tokenOut) return undefined;
     const inAddr = tokenIn.address;
     const outAddr = tokenOut.address;
     return pools?.find((pool: Pool) => {
@@ -104,6 +111,10 @@ export const PoolPage = () => {
 
   const handleAddPool = async () => {
     setAddPoolError('');
+    if (!tokenIn || !tokenOut) {
+      setAddPoolError('Please select both tokens');
+      return;
+    }
     if (!fee) {
       setAddPoolError('Please enter fee');
       return;
@@ -224,6 +235,7 @@ export const PoolPage = () => {
     selecting === Selecting.In ? tokenIn : selecting === Selecting.Out ? tokenOut : undefined;
   // 弹窗选中 token 时触发
   const handleSelectToken = (token: TokenInfo) => {
+    if (!tokenIn || !tokenOut) return;
     if (selecting === Selecting.In) {
       if (token.address === tokenOut.address) {
         setTokenOut(tokenIn);
