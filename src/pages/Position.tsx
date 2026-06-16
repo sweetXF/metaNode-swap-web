@@ -2,21 +2,16 @@ import { useAccount, useChainId, useReadContract, useWriteContract } from 'wagmi
 import { DataTable, type Column } from '../components/DataTable';
 import { getContractAddress } from '../config/contracts';
 import { positionAbi } from '../abi/PositionManager';
-import { formatToBigInt, shortAddress } from '../utils/format';
 import { formatFeeTier, formatPriceRange, sqrtPriceX96ToPrice } from '../utils/price';
 import { useMemo, useState } from 'react';
-import { Modal } from '../components/Modal';
-import { ModalFooter } from '../components/ModalFooter';
-import { AmountInput } from '../components/AmountInput';
-import { TokenList } from '../components/TokenList';
+
 import { wagmiConfig } from '../wagmi';
 import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { usePositionApproval } from '../hooks/usePositionApproval';
 import { poolAbi } from '../abi/PoolManager';
 import { TokenPair } from '../components/TokenPair';
 import { useTokenInfos } from '../hooks/useTokenInfos';
-import { Selecting, type Pool, type Position, type TokenInfo } from '../config/types';
-import { useTokenList } from '../hooks/useTokenList';
+import { type Position } from '../config/types';
 
 export const PositionPage = () => {
   const chainId = useChainId(); // 项目wagmi配置的链 id
@@ -24,17 +19,6 @@ export const PositionPage = () => {
   const isChainidMatch = curChainId === chainId;
   const positionManagerAddress = getContractAddress(chainId, 'PositionManager');
   const poolManagerAddress = getContractAddress(chainId, 'PoolManager');
-
-  const [openAddPosition, setOpenAddPosition] = useState(false);
-  const [addPositonError, setAddPositonError] = useState<string>('');
-
-  const { tokenList } = useTokenList();
-  const [tokenIn, setTokenIn] = useState<TokenInfo>(tokenList[0]);
-  const [tokenOut, setTokenOut] = useState<TokenInfo>(tokenList[1]);
-  const [amountIn, setAmountIn] = useState('');
-  const [amountOut, setAmountOut] = useState('');
-  const [addPositionFee, setAddPositionFee] = useState<number>(0);
-  const [poolIndex, setPoolIndex] = useState<number>();
 
   const { isApproved, ensureApproved } = usePositionApproval();
 
@@ -67,7 +51,7 @@ export const PositionPage = () => {
     ]);
   }, [myPositions]);
 
-  const { tokenMap } = useTokenInfos(positionTokenInfos);
+  const { tokenMap, isTokenInfoLoading } = useTokenInfos(positionTokenInfos);
 
   // 获取所有 pools
   const { data: pools } = useReadContract({
@@ -78,19 +62,6 @@ export const PositionPage = () => {
       enabled: isConnected && !!chainId && isChainidMatch,
     },
   });
-
-  //根据token0和token1获取fee：add position弹窗选定 token0 和 token1 两个下拉框，费率会自动显示。
-  const getCurPool = () => {
-    const inAddr = tokenIn.address;
-    const outAddr = tokenOut.address;
-    const curPool = pools?.find((p: Pool) => {
-      const p0 = p.token0;
-      const p1 = p.token1;
-      return (p0 === inAddr && p1 === outAddr) || (p0 === outAddr && p1 === inAddr);
-    });
-    setPoolIndex(curPool?.index);
-    setAddPositionFee(curPool?.fee ?? 0);
-  };
 
   // 发送写交易（手动 await，便于区分操作行与捕获错误）
   const { writeContractAsync } = useWriteContract();
@@ -164,69 +135,6 @@ export const PositionPage = () => {
     } finally {
       setProcessing(null);
     }
-  };
-
-  const handleAddPosition = async () => {
-    setAddPositonError('');
-    if (!account) return;
-    if (addPositionFee === undefined || poolIndex === undefined) return;
-    if (!amountIn || !amountOut) {
-      setAddPositonError('Please enter both amounts');
-      return;
-    }
-
-    try {
-      const hash = await writeContractAsync({
-        address: positionManagerAddress,
-        abi: positionAbi,
-        functionName: 'mint',
-        args: [
-          {
-            token0: tokenIn.address,
-            token1: tokenOut.address,
-            index: poolIndex,
-            amount0Desired: formatToBigInt(amountIn),
-            amount1Desired: formatToBigInt(amountOut),
-            recipient: account,
-            deadline: formatToBigInt(Math.floor(Date.now() / 1000) + 60 * 30),
-          },
-        ],
-      });
-
-      // 等上链
-      await waitForTransactionReceipt(wagmiConfig, { hash });
-      setOpenAddPosition(false);
-      refetch();
-    } catch (error: unknown) {
-      const message =
-        (error as { shortMessage?: string; message?: string })?.shortMessage ||
-        (error as Error)?.message ||
-        'Add position failed';
-      setAddPositonError(message);
-    }
-  };
-
-  //用一个 state 统一管理"哪个输入框正在选 token"
-  const [selecting, setSelecting] = useState<Selecting>();
-  const selectedToken =
-    selecting === Selecting.In ? tokenIn : selecting === Selecting.Out ? tokenOut : undefined;
-
-  // tokens 弹窗选中 token 时触发
-  const handleSelectToken = (token: TokenInfo) => {
-    // 如果选中的是另一边的 token，自动交换。（也可传disabledAddresses，禁选另一边的token）
-    if (selecting === Selecting.In) {
-      //如： 用户在 In 选了 XRP，但 Out 已经是 XRP，就把 Out 设为旧的 In（ETH），变成"交换两边"
-      if (token.address === tokenOut.address) {
-        setTokenOut(tokenIn);
-      }
-      setTokenIn(token);
-    } else if (selecting === Selecting.Out) {
-      if (token.address === tokenIn.address) {
-        setTokenIn(tokenOut);
-      }
-      setTokenOut(token);
-    }
-    getCurPool();
   };
 
   const columns: Column<Position>[] = [
@@ -321,77 +229,9 @@ export const PositionPage = () => {
 
         <DataTable<Position>
           title="My Positions"
-          extra={
-            <>
-              <button
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                onClick={() => {
-                  setOpenAddPosition(true);
-                  getCurPool();
-                }}
-              >
-                Add Position
-              </button>
-              <Modal
-                isOpen={openAddPosition}
-                onClose={() => setOpenAddPosition(false)}
-                title="Add Position"
-                footer={
-                  <ModalFooter
-                    onClose={() => setOpenAddPosition(false)}
-                    handleAddClick={handleAddPosition}
-                  />
-                }
-              >
-                <p className="text-sm pb-1">
-                  <span className="text-red-500">*</span>Deposit amounts
-                </p>
-                <div className="space-y-1">
-                  <AmountInput
-                    token={tokenIn}
-                    amount={amountIn}
-                    onAmountChange={setAmountIn}
-                    onTokenSelect={() => setSelecting(Selecting.In)}
-                    showMax
-                  />
-                  <AmountInput
-                    token={tokenOut}
-                    amount={amountOut}
-                    onAmountChange={setAmountOut}
-                    onTokenSelect={() => setSelecting(Selecting.Out)}
-                    // readOnly
-                  />
-                </div>
-
-                {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
-                <TokenList
-                  tokens={tokenList}
-                  open={selecting !== undefined}
-                  onClose={() => setSelecting(undefined)}
-                  onSelect={handleSelectToken}
-                  selected={selectedToken}
-                  // 如果不想要"自动交换in Out"行为，可选：直接禁选（置灰）列表中另一边的token
-                  // disabledAddresses={
-                  //   selecting === Selecting.In ? [tokenOut.address] :
-                  //   selecting === Selecting.Out ? [tokenIn.address] : []
-                  // }
-                />
-
-                <p className="text-sm pt-3 pb-1">
-                  <span className="text-red-500">*</span>Fee tier
-                </p>
-                <p className="text-center">{addPositionFee}</p>
-                {/* <FeeTierSelect disabled={!tokenIn || !tokenOut} value={addPositionFee} onChange={setAddPositionFee} /> */}
-
-                {addPositonError ? (
-                  <p className="text-red-500 p-2 text-sm">{addPositonError}</p>
-                ) : null}
-              </Modal>
-            </>
-          }
           columns={columns}
           data={myPositions as Position[] | undefined}
-          loading={isLoading}
+          loading={isLoading || isTokenInfoLoading}
           error={error}
         />
       </div>

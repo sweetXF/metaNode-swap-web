@@ -3,7 +3,7 @@ export type Pool = {
   feeProtocol: number;
   index: number;
   liquidity: bigint; // 池子总流动性（所有 LP 累加）
-  pool: `0x${string}`;
+  pool: `0x${string}`; // 池子地址 唯一
   sqrtPriceX96: bigint; // 当前价格
   tick: number;
   tickLower: number;
@@ -16,7 +16,7 @@ export type Position = {
   fee: number;
   feeGrowthInside0LastX128: bigint; //上次提取手续费时的 feeGrowthGlobal0X128
   feeGrowthInside1LastX128: bigint; // 上次提取手续费时的 feeGrowthGlobal1X128
-  id: bigint; // 仓位编号 positionId
+  id: bigint; // 仓位编号 positionId 唯一
   index: number; // 位置编号,属于哪个 pool
   liquidity: bigint; // 该 Position 拥有的流动性
   owner: `0x${string}`; // 拥有者（具体用户）

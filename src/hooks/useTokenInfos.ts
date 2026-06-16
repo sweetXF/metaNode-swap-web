@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
 import { erc20Abi } from 'viem';
 import { useAccount, useReadContracts } from 'wagmi';
+import type { TokenInfo } from '../config/types';
 
-// useTokenInfos ：接收 (token, holder) 对的数组
+/** useTokenInfos ：接收 (token, holder) 对的数组
+ * 返回 token 地址 -> { symbol, decimals, balance, owner } 的映射
+ * 若不传holder，则 balance 为用户钱包余额*/
 type TokenHolderPair = { token: `0x${string}`; holder?: `0x${string}` };
 
 export const useTokenInfos = (pairs: TokenHolderPair[]) => {
@@ -40,5 +43,28 @@ export const useTokenInfos = (pairs: TokenHolderPair[]) => {
     return m;
   }, [data, pairs, user]);
 
-  return { tokenMap, isTokenInfoLoading };
+  /**
+   * 
+   * @param pair { token, holder }
+   * 返回：TokenInfo = {
+        address: `0x${string}`;
+        symbol?: string;
+        decimals?: number;
+        balance?: bigint;
+        owner?: `0x${string}`;
+}
+   */
+  const fetchTokenInfo = (pair: TokenHolderPair) => {
+    const tokenInfo = tokenMap.get(pair.token);
+    const reTokenInfo: TokenInfo = {
+      address: pair.token,
+      symbol: tokenInfo?.symbol,
+      decimals: tokenInfo?.decimals,
+      balance: tokenInfo?.balance,
+      owner: tokenInfo?.owner,
+    };
+    return reTokenInfo;
+  };
+
+  return { tokenMap, isTokenInfoLoading, fetchTokenInfo };
 };

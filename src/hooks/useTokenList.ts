@@ -40,7 +40,6 @@ export const useTokenList = () => {
       balance: value.balance,
     }));
   }, [tokenMap]);
-  console.log('tokenList', tokenList);
 
   return { tokenList };
 };
