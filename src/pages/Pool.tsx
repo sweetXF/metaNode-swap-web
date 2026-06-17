@@ -20,7 +20,7 @@ import { AmountInput } from '../components/AmountInput';
 import { FeeTierSelect } from '../components/FeeTierSelect';
 import { CellInput } from '../components/CellInput';
 import { TokenList } from '../components/TokenList';
-import { waitForTransactionReceipt } from '@wagmi/core';
+import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
 import { Selecting, type Pool, type TokenInfo } from '../config/types';
 import { useTokenList } from '../hooks/useTokenList';
@@ -54,7 +54,6 @@ export const PoolPage = () => {
   }, [tokenList]);
 
   // Add position
-  const [processing, setProcessing] = useState<{ id: number } | null>(null);
   const [openAddPosition, setOpenAddPosition] = useState(false);
   const [addPositonError, setAddPositonError] = useState<string>('');
   const [addPositionTokenIn, setAddPositionTokenIn] = useState<TokenInfo>();
@@ -183,6 +182,13 @@ export const PoolPage = () => {
     setAddPositionFee(pool.fee);
   };
 
+  //token授权
+  const { allowance: allowance0, ensureApprovedAllowance: ensureApprovedAllowance0 } =
+    usePositionApproval(addPositionTokenIn?.address);
+
+  const { allowance: allowance1, ensureApprovedAllowance: ensureApprovedAllowance1 } =
+    usePositionApproval(addPositionTokenOut?.address);
+
   // Add position
   const handleAddPosition = async (pool: Pool) => {
     setAddPositonError('');
@@ -192,10 +198,29 @@ export const PoolPage = () => {
       setAddPositonError('Please enter both amounts');
       return;
     }
-
     setAddPositionCurPool(pool);
+    //先确保NFT授权PositionManager
+    const NFTApprove = await ensureApproved();
+    if (!NFTApprove) {
+      setAddPositonError('NFT approve failed');
+      return;
+    }
+    // 校验并自动授权(ensureApprovedAllowance) token0、token1
+    const amount0Desired = formatToBigInt(amountIn, addPositionTokenIn.decimals ?? 18);
+    const amount1Desired = formatToBigInt(amountOut, addPositionTokenOut.decimals ?? 18);
+    const approveToken0 = await ensureApprovedAllowance0(amount0Desired);
+    if (!approveToken0) {
+      setAddPositonError('token0 approve failed');
+      return;
+    }
+    const approveToken1 = await ensureApprovedAllowance1(amount1Desired);
+    if (!approveToken1) {
+      setAddPositonError('token1 approve failed');
+      return;
+    }
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 30);
     try {
-      const hash = await writeContractAsync({
+      const { request } = await simulateContract(wagmiConfig, {
         address: positionManagerAddress,
         abi: positionAbi,
         functionName: 'mint',
@@ -204,18 +229,20 @@ export const PoolPage = () => {
             token0: addPositionTokenIn.address,
             token1: addPositionTokenOut.address,
             index: pool.index,
-            amount0Desired: formatToBigInt(amountIn),
-            amount1Desired: formatToBigInt(amountOut),
+            amount0Desired,
+            amount1Desired,
             recipient: account,
-            deadline: formatToBigInt(Math.floor(Date.now() / 1000) + 60 * 30),
+            deadline,
           },
         ],
+        account,
       });
-
-      // 等上链
+      const hash = await writeContractAsync(request);
+      // 等上链确认
       await waitForTransactionReceipt(wagmiConfig, { hash });
       setOpenAddPosition(false);
-      refetch();
+      // refetch();//刷新pool列表(liquidity 列会变)，与navigate二选一
+      navigate('/position'); //跳转到position页面,刷新position列表
     } catch (error: unknown) {
       const message =
         (error as { shortMessage?: string; message?: string })?.shortMessage ||
@@ -405,12 +432,12 @@ export const PoolPage = () => {
                 />
 
                 <p className="text-sm pt-3 pb-1">
-                  <span className="text-red-500">*</span>Fee tier
+                  <span className="text-red-500">*</span>Fee
                 </p>
                 <CellInput
                   value={fee}
                   onChange={setFee}
-                  placeholder="Fee tier"
+                  placeholder="Fee"
                   disabled={!tokenIn || !tokenOut}
                 />
                 {/* <FeeTierSelect disabled={!tokenIn || !tokenOut} value={fee} onChange={setFee} /> */}
@@ -500,7 +527,7 @@ export const PoolPage = () => {
                 <p className="text-sm pt-3 pb-1">
                   <span className="text-red-500">*</span>Fee tier
                 </p>
-                <p className="text-center">{addPositionFee}</p>
+                <p className="text-center">{formatFeeTier(addPositionFee)}</p>
                 {/* <FeeTierSelect disabled={!tokenIn || !tokenOut} value={addPositionFee} onChange={setAddPositionFee} /> */}
 
                 {addPositonError ? (

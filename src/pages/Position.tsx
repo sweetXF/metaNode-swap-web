@@ -36,11 +36,7 @@ export const PositionPage = () => {
     },
   });
 
-  const myaccount = '0x2130DF4D9489534a5E5b8f995F81AD2151b5EA7c';
-  const myaccount1 = '0xb975c82cafF9Fd068326b0Df0eD0eA0d839f24b4';
-  const myPositions = positions
-    ? positions.filter((p: Position) => p.owner === myaccount1 || p.owner === myaccount)
-    : [];
+  const myPositions = positions ? positions.filter((p: Position) => p.owner === account) : [];
 
   // 仓位池子 → 两个 (token, holder) pair
   const positionTokenInfos = useMemo(() => {
@@ -91,6 +87,7 @@ export const PositionPage = () => {
         abi: positionAbi,
         functionName: 'burn',
         args: [row.id],
+        account,
       });
 
       // 3. 模拟成功，发送交易并等待上链
@@ -121,6 +118,7 @@ export const PositionPage = () => {
         abi: positionAbi,
         functionName: 'collect',
         args: [row.id, account],
+        account,
       });
       const hash = await writeContractAsync(request);
       await waitForTransactionReceipt(wagmiConfig, { hash });

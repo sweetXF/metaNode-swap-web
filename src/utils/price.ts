@@ -140,6 +140,6 @@ export type FeeTier = (typeof FEE_TIERS)[number]['value']; // 100 | 500 | 3000 |
  * 把 费率 fee（百万分之一）格式化为百分比字符串
  * 例：3000 -> "0.30%"
  */
-export const formatFeeTier = (fee: number, fractionDigits = 2): string => {
+export const formatFeeTier = (fee: number, fractionDigits = 4): string => {
   return `${(fee / 10000).toFixed(fractionDigits)}%`;
 };
