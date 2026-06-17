@@ -1,10 +1,16 @@
 interface FooterProps {
   onClose: () => void;
   handleAddClick: () => void;
-  isConfirming?: boolean;
+  isDisabled?: boolean;
+  isApproved?: boolean;
 }
 
-export const ModalFooter = ({ onClose, handleAddClick, isConfirming = false }: FooterProps) => {
+export const ModalFooter = ({
+  onClose,
+  handleAddClick,
+  isDisabled = false,
+  isApproved = false,
+}: FooterProps) => {
   return (
     <>
       <button
@@ -14,11 +20,11 @@ export const ModalFooter = ({ onClose, handleAddClick, isConfirming = false }: F
         Cancel
       </button>
       <button
-        disabled={isConfirming}
+        disabled={isDisabled}
         onClick={handleAddClick}
         className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isConfirming ? 'Confirming' : 'Add'}
+        {isDisabled ? (isApproved ? 'Adding' : 'Approving') : 'Add'}
       </button>
     </>
   );

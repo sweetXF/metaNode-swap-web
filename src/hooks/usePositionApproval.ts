@@ -5,7 +5,7 @@ import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
 import { erc20Abi } from 'viem';
 
-const MAX_UINT256 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn; // 标准uint256最大值
+const MAX_UINT256 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn; // 标准uint256最大值,替代 2n**256n -1n
 
 export const usePositionApproval = (tokenAddress?: `0x${string}`) => {
   const chainId = useChainId();

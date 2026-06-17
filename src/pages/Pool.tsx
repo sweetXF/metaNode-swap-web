@@ -3,7 +3,7 @@ import { poolAbi } from '../abi/PoolManager';
 import { getContractAddress } from '../config/contracts';
 import { DataTable, type Column } from '../components/DataTable';
 import { TokenPair } from '../components/TokenPair';
-import { useTokenInfos } from '../hooks/useTokenInfos';
+import { useTokenInfos, type TokenHolderPair } from '../hooks/useTokenInfos';
 import { useEffect, useMemo, useState } from 'react';
 import { formatBigInt, formatToBigInt } from '../utils/format';
 import {
@@ -89,7 +89,8 @@ export const PoolPage = () => {
 
   const { tokenMap, isTokenInfoLoading, fetchTokenInfo } = useTokenInfos(poolTokenInfos);
 
-  const { writeContractAsync, isPending } = useWriteContract();
+  const { writeContractAsync: writeAddPool, isPending: isPendingPool } = useWriteContract();
+  const { writeContractAsync: writeAddPosition, isPending: isPendingPosition } = useWriteContract();
 
   //用于add pool时判断是否已存在该池子
   const curAddPool = useMemo(() => {
@@ -114,8 +115,8 @@ export const PoolPage = () => {
       setAddPoolError('Please select both tokens');
       return;
     }
-    if (!fee) {
-      setAddPoolError('Please enter fee');
+    if (!fee || +fee <= 0) {
+      setAddPoolError('Please enter a valid fee');
       return;
     }
     // if (!amountIn || !amountOut) {
@@ -124,6 +125,14 @@ export const PoolPage = () => {
     // }
     if (!lowPrice || !highPrice) {
       setAddPoolError('Please enter low and high price');
+      return;
+    }
+    if (+lowPrice <= 0 || +highPrice <= 0) {
+      setAddPoolError('Price must be greater than 0');
+      return;
+    }
+    if (+lowPrice >= +highPrice) {
+      setAddPoolError('Low price must be less than high price');
       return;
     }
     if (!currentPrice) {
@@ -141,7 +150,7 @@ export const PoolPage = () => {
     }
 
     try {
-      const hash = await writeContractAsync({
+      const hash = await writeAddPool({
         address: poolManagerAddress,
         abi: poolAbi,
         functionName: 'createAndInitializePoolIfNecessary',
@@ -189,15 +198,48 @@ export const PoolPage = () => {
   const { allowance: allowance1, ensureApprovedAllowance: ensureApprovedAllowance1 } =
     usePositionApproval(addPositionTokenOut?.address);
 
+  // add position：按"当前钱包"读取ERC20两种 token 余额（holder 省略 → 默认当前账户，区别于池子余额）
+  const positionUserPairs = useMemo(() => {
+    const arr: TokenHolderPair[] = [];
+    if (addPositionTokenIn?.address) arr.push({ token: addPositionTokenIn.address });
+    if (addPositionTokenOut?.address) arr.push({ token: addPositionTokenOut.address });
+    return arr;
+  }, [addPositionTokenIn?.address, addPositionTokenOut?.address]);
+
+  const { tokenMap: positionBalanceMap } = useTokenInfos(positionUserPairs);
+
+  const balance0 = addPositionTokenIn
+    ? positionBalanceMap.get(addPositionTokenIn.address)?.balance
+    : undefined;
+  const balance1 = addPositionTokenOut
+    ? positionBalanceMap.get(addPositionTokenOut.address)?.balance
+    : undefined;
+
   // Add position
   const handleAddPosition = async (pool: Pool) => {
     setAddPositonError('');
-    if (!isConnected || !account || !isChainidMatch || !isApproved || !pool) return;
+    if (!isConnected || !account || !isChainidMatch || !pool) return;
     if (!addPositionTokenIn || !addPositionTokenOut) return;
     if (!amountIn || !amountOut) {
       setAddPositonError('Please enter both amounts');
       return;
     }
+    if (+amountIn <= 0 || +amountOut <= 0) {
+      setAddPositonError('Amount must be greater than 0');
+      return;
+    }
+    const needAmount0 = formatToBigInt(amountIn, addPositionTokenIn.decimals ?? 18);
+    const needAmount1 = formatToBigInt(amountOut, addPositionTokenOut.decimals ?? 18);
+    // 余额未加载完（undefined）时不拦截，避免误报
+    if (balance0 !== undefined && balance0 < needAmount0) {
+      setAddPositonError(`${addPositionTokenIn.symbol ?? 'token0'} balance not enough`);
+      return;
+    }
+    if (balance1 !== undefined && balance1 < needAmount1) {
+      setAddPositonError(`${addPositionTokenOut.symbol ?? 'token1'} balance not enough`);
+      return;
+    }
+
     setAddPositionCurPool(pool);
     //先确保NFT授权PositionManager
     const NFTApprove = await ensureApproved();
@@ -237,11 +279,11 @@ export const PoolPage = () => {
         ],
         account,
       });
-      const hash = await writeContractAsync(request);
+      const hash = await writeAddPosition(request);
       // 等上链确认
       await waitForTransactionReceipt(wagmiConfig, { hash });
       setOpenAddPosition(false);
-      // refetch();//刷新pool列表(liquidity 列会变)，与navigate二选一
+      refetch(); //刷新pool列表(liquidity 列会变)
       navigate('/position'); //跳转到position页面,刷新position列表
     } catch (error: unknown) {
       const message =
@@ -391,7 +433,7 @@ export const PoolPage = () => {
                   <ModalFooter
                     onClose={() => setOpenAddPool(false)}
                     handleAddClick={handleAddPool}
-                    isConfirming={isPending}
+                    isDisabled={isPendingPool}
                   />
                 }
               >
@@ -482,7 +524,8 @@ export const PoolPage = () => {
                 footer={
                   <ModalFooter
                     onClose={() => setOpenAddPosition(false)}
-                    isConfirming={isPending}
+                    isDisabled={isPendingPosition}
+                    isApproved={isApproved}
                     handleAddClick={() => {
                       if (!addPositionCurPool) return;
                       handleAddPosition(addPositionCurPool);

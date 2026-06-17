@@ -6,7 +6,7 @@ import type { TokenInfo } from '../config/types';
 /** useTokenInfos ：接收 (token, holder) 对的数组
  * 返回 token 地址 -> { symbol, decimals, balance, owner } 的映射
  * 若不传holder，则 balance 为用户钱包余额*/
-type TokenHolderPair = { token: `0x${string}`; holder?: `0x${string}` };
+export type TokenHolderPair = { token: `0x${string}`; holder?: `0x${string}` };
 
 export const useTokenInfos = (pairs: TokenHolderPair[]) => {
   const { address: user } = useAccount();
