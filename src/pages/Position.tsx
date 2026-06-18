@@ -7,11 +7,12 @@ import { useMemo, useState } from 'react';
 
 import { wagmiConfig } from '../wagmi';
 import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
-import { usePositionApproval } from '../hooks/usePositionApproval';
+// import { usePositionApproval } from '../hooks/usePositionApproval';
 import { poolAbi } from '../abi/PoolManager';
 import { TokenPair } from '../components/TokenPair';
 import { useTokenInfos } from '../hooks/useTokenInfos';
 import { type Position } from '../config/types';
+import { formatBigInt } from '../utils/format';
 
 export const PositionPage = () => {
   const chainId = useChainId(); // 项目wagmi配置的链 id
@@ -20,7 +21,7 @@ export const PositionPage = () => {
   const positionManagerAddress = getContractAddress(chainId, 'PositionManager');
   const poolManagerAddress = getContractAddress(chainId, 'PoolManager');
 
-  const { isApproved, ensureApproved } = usePositionApproval();
+  // const { isApproved, ensureApproved } = usePositionApproval();
 
   const {
     data: positions,
@@ -37,6 +38,7 @@ export const PositionPage = () => {
   });
 
   const myPositions = positions ? positions.filter((p: Position) => p.owner === account) : [];
+  console.log(myPositions);
 
   // 仓位池子 → 两个 (token, holder) pair
   const positionTokenInfos = useMemo(() => {
@@ -69,19 +71,25 @@ export const PositionPage = () => {
   // 最近一次操作的错误信息
   const [actionError, setActionError] = useState<string>();
 
+  // 用户移除仓位（移除流动性）
   const handleRemove = async (row: Position) => {
-    if (row.liquidity !== 0n) {
-      alert('please collect first');
+    if (!account) {
+      setActionError('no Account');
       return;
     }
+    if (row.liquidity === 0n) {
+      setActionError('No liquidity to remove');
+      return;
+    }
+
     setActionError(undefined);
     setProcessing({ id: row.id, action: 'remove' });
     try {
-      // 1. 确保已授权（usePositionApproval内部完成：读取最新状态 → 模拟 → 发送 → 等待上链 → 刷新状态）
-      const approved = await ensureApproved();
-      if (!approved) throw new Error('Approval not completed');
+      // （若需第三方合约代操作）确保已授权（usePositionApproval内部完成：读取最新状态 → 模拟 → 发送 → 等待上链 → 刷新状态）
+      // const approved = await ensureApproved();
+      // if (!approved) throw new Error('Approval not completed');
 
-      // 2. 先模拟交易、校验、拿 request，发现错误立即报，不花 gas
+      // 1. 先模拟交易、校验、拿 request，发现错误立即报，不花 gas
       const { request } = await simulateContract(wagmiConfig, {
         address: positionManagerAddress,
         abi: positionAbi,
@@ -90,12 +98,13 @@ export const PositionPage = () => {
         account,
       });
 
-      // 3. 模拟成功，发送交易并等待上链
+      // 2. 模拟成功，发送交易并等待上链
       const hash = await writeContractAsync(request);
       await waitForTransactionReceipt(wagmiConfig, { hash });
 
-      // 4. 成功后刷新列表
+      // 3. 成功后刷新列表
       await refetch();
+      alert('Remove success');
     } catch (error: unknown) {
       const msg =
         (error as { shortMessage?: string; message?: string })?.shortMessage ||
@@ -108,8 +117,16 @@ export const PositionPage = () => {
     }
   };
 
+  //用户取手续费 / 奖励
   const handleCollect = async (row: Position) => {
-    if (!account) return;
+    if (!account) {
+      setActionError('no Account');
+      return;
+    }
+    if (row.tokensOwed0 === 0n && row.tokensOwed1 === 0n) {
+      setActionError('No tokens to collect');
+      return;
+    }
     setActionError(undefined);
     setProcessing({ id: row.id, action: 'collect' });
     try {
@@ -123,6 +140,7 @@ export const PositionPage = () => {
       const hash = await writeContractAsync(request);
       await waitForTransactionReceipt(wagmiConfig, { hash });
       await refetch();
+      alert('Collect success');
     } catch (error: unknown) {
       const msg =
         (error as { shortMessage?: string; message?: string })?.shortMessage ||
@@ -163,9 +181,9 @@ export const PositionPage = () => {
       },
     },
     {
-      key: 'index',
-      label: 'index',
-      render: row => row.index,
+      key: 'liquidity',
+      label: 'Liquidity',
+      render: row => formatBigInt(row.liquidity),
     },
     {
       key: 'id',
@@ -187,7 +205,8 @@ export const PositionPage = () => {
               className="text-blue-600 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => handleRemove(row)}
             >
-              {isRemoving ? (isApproved ? 'Removing...' : 'Approving...') : 'Remove'}
+              {/* {isRemoving ? (isApproved ? 'Removing...' : 'Approving...') : 'Remove'} */}
+              {isRemoving ? 'Removing...' : 'Remove'}
             </button>
             <button
               disabled={anyProcessing}

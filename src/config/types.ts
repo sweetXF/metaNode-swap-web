@@ -14,8 +14,8 @@ export type Pool = {
 
 export type Position = {
   fee: number;
-  feeGrowthInside0LastX128: bigint; //上次提取手续费时的 feeGrowthGlobal0X128
-  feeGrowthInside1LastX128: bigint; // 上次提取手续费时的 feeGrowthGlobal1X128
+  feeGrowthInside0LastX128: bigint; //手续费累计，上次提取手续费时的 feeGrowthGlobal0X128
+  feeGrowthInside1LastX128: bigint; //手续费累计， 上次提取手续费时的 feeGrowthGlobal1X128
   id: bigint; // 仓位编号 positionId 唯一
   index: number; // 位置编号,属于哪个 pool
   liquidity: bigint; // 该 Position 拥有的流动性
@@ -24,8 +24,8 @@ export type Position = {
   tickUpper: number;
   token0: `0x${string}`;
   token1: `0x${string}`;
-  tokensOwed0: bigint; // 可提取的 token0 数量
-  tokensOwed1: bigint; // 可提取的 token1 数量
+  tokensOwed0: bigint; // 可提取的 token0 数量（本金 + 手续费）
+  tokensOwed1: bigint; // 可提取的 token1 数量（本金 + 手续费）
 };
 
 export enum Selecting {

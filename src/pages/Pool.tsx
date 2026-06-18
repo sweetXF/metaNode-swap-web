@@ -174,7 +174,8 @@ export const PoolPage = () => {
       // 等上链
       await waitForTransactionReceipt(wagmiConfig, { hash });
       setOpenAddPool(false);
-      refetch();
+      await refetch();
+      alert('Add pool success');
     } catch (error: unknown) {
       const message =
         (error as { shortMessage?: string; message?: string })?.shortMessage ||
@@ -311,7 +312,7 @@ export const PoolPage = () => {
       // 等上链确认
       await waitForTransactionReceipt(wagmiConfig, { hash });
       setOpenAddPosition(false);
-      // refetch(); //刷新pool列表(liquidity 列会变)
+      //await refetch(); //刷新pool列表(liquidity 列会变)
       navigate('/position'); //跳转到position页面,刷新position列表
     } catch (error: unknown) {
       const message =

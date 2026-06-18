@@ -191,6 +191,14 @@ export const getPairedAmount = (
   if (sqrtPrice <= sqrtPriceLower) return 0n; // 低于下界，不需要配 amount1，只收 token0
   if (sqrtPrice >= sqrtPriceUpper) return 0n; // 高于上界，不需要配 amount0，只收 token1
 
+  /**
+   * 两种 token 的占比由当前价 sqrtPrice 把区间劈成两半决定：
+   * sqrtA ───────── sqrtPrice ───────── sqrtB
+  │  已走过的一半   │   还没走的一半  │
+  │   = token1     │   = token0     │
+  └── [sqrtA,sqrtPrice]┘  └[sqrtPrice,sqrtB]┘
+  amount1          amount0
+  */
   // 价格在区间内, 先算 liquidity
   if (isToken0) {
     // 已知 amount0 求 amount1 liquidity
