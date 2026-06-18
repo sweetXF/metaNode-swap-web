@@ -9,6 +9,7 @@ import { formatBigInt, formatToBigInt } from '../utils/format';
 import {
   formatFeeTier,
   formatPriceRange,
+  getPairedAmount,
   priceToSqrtPriceX96,
   priceToTick,
   sqrtPriceX96ToPrice,
@@ -161,7 +162,11 @@ export const PoolPage = () => {
             fee: Number(fee), //uint24
             tickLower: priceToTick(lowPrice), //int24
             tickUpper: priceToTick(highPrice),
-            sqrtPriceX96: priceToSqrtPriceX96(currentPrice),
+            sqrtPriceX96: priceToSqrtPriceX96(
+              currentPrice,
+              tokenIn.decimals ?? 18,
+              tokenOut.decimals ?? 18
+            ),
           },
         ],
       });
@@ -198,7 +203,7 @@ export const PoolPage = () => {
   const { allowance: allowance1, ensureApprovedAllowance: ensureApprovedAllowance1 } =
     usePositionApproval(addPositionTokenOut?.address);
 
-  // add position：按"当前钱包"读取ERC20两种 token 余额（holder 省略 → 默认当前账户，区别于池子余额）
+  // add position：按"当前钱包"读取ERC20两种 token 余额（holder 省略 → 默认当前账户，区别于池子余额），检验余额是否足够
   const positionUserPairs = useMemo(() => {
     const arr: TokenHolderPair[] = [];
     if (addPositionTokenIn?.address) arr.push({ token: addPositionTokenIn.address });
@@ -215,10 +220,33 @@ export const PoolPage = () => {
     ? positionBalanceMap.get(addPositionTokenOut.address)?.balance
     : undefined;
 
+  // amountIn 变化时，按当前价 + 区间算出 amountOut（集中流动性比例固定）
+  useEffect(() => {
+    if (!addPositionCurPool || !addPositionTokenIn || !addPositionTokenOut) return;
+    if (!amountIn || +amountIn <= 0) {
+      setAmountOut('');
+      return;
+    }
+    const decimalsIn = addPositionTokenIn.decimals ?? 18;
+    const decimalsOut = addPositionTokenOut.decimals ?? 18;
+    const amountInRaw = formatToBigInt(amountIn, decimalsIn);
+    // 判断 amountIn 这一边到底是不是池子的 token0
+    const isInToken0 = addPositionTokenIn.address === addPositionCurPool.token0;
+    //算出 amountOut raw
+    const amountOutRaw = getPairedAmount(
+      addPositionCurPool.sqrtPriceX96,
+      addPositionCurPool.tickLower,
+      addPositionCurPool.tickUpper,
+      amountInRaw,
+      isInToken0
+    );
+    setAmountOut(amountOutRaw > 0n ? formatBigInt(amountOutRaw, decimalsOut, 8) : '0');
+  }, [amountIn, addPositionCurPool, addPositionTokenIn, addPositionTokenOut]);
+
   // Add position
   const handleAddPosition = async (pool: Pool) => {
     setAddPositonError('');
-    if (!isConnected || !account || !isChainidMatch || !pool) return;
+    if (!isConnected || !account || !isChainidMatch || !pool || !addPositionCurPool) return;
     if (!addPositionTokenIn || !addPositionTokenOut) return;
     if (!amountIn || !amountOut) {
       setAddPositonError('Please enter both amounts');
@@ -268,8 +296,8 @@ export const PoolPage = () => {
         functionName: 'mint',
         args: [
           {
-            token0: addPositionTokenIn.address,
-            token1: addPositionTokenOut.address,
+            token0: addPositionCurPool.token0,
+            token1: addPositionCurPool.token1,
             index: pool.index,
             amount0Desired,
             amount1Desired,
@@ -283,7 +311,7 @@ export const PoolPage = () => {
       // 等上链确认
       await waitForTransactionReceipt(wagmiConfig, { hash });
       setOpenAddPosition(false);
-      refetch(); //刷新pool列表(liquidity 列会变)
+      // refetch(); //刷新pool列表(liquidity 列会变)
       navigate('/position'); //跳转到position页面,刷新position列表
     } catch (error: unknown) {
       const message =
@@ -516,7 +544,7 @@ export const PoolPage = () => {
                 {addPoolError ? <p className="text-red-500 p-2 text-sm">{addPoolError}</p> : null}
               </Modal>
 
-              {/* table action Add position Modal 弹窗*/}
+              {/*  Add position Modal 弹窗*/}
               <Modal
                 isOpen={openAddPosition}
                 onClose={() => setOpenAddPosition(false)}
@@ -547,9 +575,9 @@ export const PoolPage = () => {
                   <AmountInput
                     token={addPositionTokenOut}
                     amount={amountOut}
-                    onAmountChange={setAmountOut}
+                    // onAmountChange={setAmountOut}
                     onTokenSelect={() => setPositionSelecting(Selecting.Out)}
-                    // readOnly
+                    readOnly
                   />
                 </div>
 

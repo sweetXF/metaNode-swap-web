@@ -143,3 +143,62 @@ export type FeeTier = (typeof FEE_TIERS)[number]['value']; // 100 | 500 | 3000 |
 export const formatFeeTier = (fee: number, fractionDigits = 4): string => {
   return `${(fee / 10000).toFixed(fractionDigits)}%`;
 };
+
+const getLiquidityForAmount0 = (sqrt0: bigint, sqrt1: bigint, amount0: bigint): bigint => {
+  if (sqrt0 > sqrt1) [sqrt0, sqrt1] = [sqrt1, sqrt0];
+  const intermediate = (sqrt0 * sqrt1) / Q96;
+  return (amount0 * intermediate) / (sqrt1 - sqrt0);
+};
+
+const getLiquidityForAmount1 = (sqrt0: bigint, sqrt1: bigint, amount1: bigint): bigint => {
+  if (sqrt0 > sqrt1) [sqrt0, sqrt1] = [sqrt1, sqrt0];
+  return (amount1 * Q96) / (sqrt1 - sqrt0);
+};
+
+const getAmount0ForLiquidity = (sqrt0: bigint, sqrt1: bigint, liquidity: bigint): bigint => {
+  if (sqrt0 > sqrt1) [sqrt0, sqrt1] = [sqrt1, sqrt0];
+  return (liquidity * Q96 * (sqrt1 - sqrt0)) / sqrt1 / sqrt0;
+};
+
+const getAmount1ForLiquidity = (sqrt0: bigint, sqrt1: bigint, liquidity: bigint): bigint => {
+  if (sqrt0 > sqrt1) [sqrt0, sqrt1] = [sqrt1, sqrt0];
+  return (liquidity * (sqrt1 - sqrt0)) / Q96;
+};
+
+/**
+ * 添加流动性时：已知一种 token 的数量，按"当前价 + 区间"算出另一种 token 应配的数量。
+ * @param sqrtPriceX96 池子当前价（pool.sqrtPriceX96）
+ * @param tickLower 、 tickUpper 区间
+ * @param amount   输入的数量（raw，最小单位）
+ * @param isToken0 输入的是不是 token0；true=已知 amount0 求 amount1，false=反之
+ * @returns 算出另一边的数量（raw）。价格在区间外、该边不需要时返回 0n
+ */
+export const getPairedAmount = (
+  sqrtPriceX96: bigint,
+  tickLower: number,
+  tickUpper: number,
+  amount: bigint,
+  isToken0: boolean
+): bigint => {
+  if (amount <= 0n || sqrtPriceX96 <= 0n) return 0n;
+  const sqrtPrice = sqrtPriceX96;
+  let sqrtPriceLower = tickToSqrtPriceX96(tickLower);
+  let sqrtPriceUpper = tickToSqrtPriceX96(tickUpper);
+  if (sqrtPriceLower > sqrtPriceUpper)
+    [sqrtPriceLower, sqrtPriceUpper] = [sqrtPriceUpper, sqrtPriceLower];
+
+  // 价格在区间外：池子只收单边 token，另一边为 0
+  if (sqrtPrice <= sqrtPriceLower) return 0n; // 低于下界，不需要配 amount1，只收 token0
+  if (sqrtPrice >= sqrtPriceUpper) return 0n; // 高于上界，不需要配 amount0，只收 token1
+
+  // 价格在区间内, 先算 liquidity
+  if (isToken0) {
+    // 已知 amount0 求 amount1 liquidity
+    const L = getLiquidityForAmount0(sqrtPrice, sqrtPriceUpper, amount);
+    return getAmount1ForLiquidity(sqrtPriceLower, sqrtPrice, L);
+  } else {
+    // 已知 amount1 求 amount0 liquidity
+    const L = getLiquidityForAmount1(sqrtPriceLower, sqrtPrice, amount);
+    return getAmount0ForLiquidity(sqrtPrice, sqrtPriceUpper, L);
+  }
+};
