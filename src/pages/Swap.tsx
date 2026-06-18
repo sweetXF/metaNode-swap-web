@@ -32,6 +32,23 @@ export const SwapPage = () => {
     setTokenOut(prev => prev ?? tokenList[1]);
   }, [tokenList]);
 
+  /** 滑点限价：
+   * zeroForOne = true（token0 → token1 卖出 token0, 买入 token1,价格下行）：sqrtPriceLimitX96 必须 小于当前价格，且大于最小价格。价格跌到 sqrtPriceLimitX96 就停止交易，防止滑点过大、亏太多
+   * zeroForOne = false（token1 → token0 卖出 token1,买入 token0,价格上行）：sqrtPriceLimitX96 必须 大于当前价格，且小于最大价格
+   */
+  // 价格边界常量
+  const MIN_SQRT_PRICE = 4295128739n; //池子能到达的最低开方价格（对应 tick 下限）
+  const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342n; //池子能到达的最高开方价格（对应 tick 上限）
+  /**根据交易方向计算合法的 sqrtPriceLimitX96。
+   * zeroForOne(价格下行) → MIN_SQRT_PRICE + 1；否则(价格上行) → MAX_SQRT_PRICE - 1
+   * 限价设为 MIN_SQRT_PRICE + 1n：几乎允许价格跌到最低，几乎无滑点限制
+   * 限价设为 MAX_SQRT_PRICE - 1n：几乎允许价格涨到最高，几乎无滑点限制
+   */
+  const getSqrtPriceLimit = (inAddr: string, outAddr: string) => {
+    const zeroForOne = inAddr.toLowerCase() < outAddr.toLowerCase(); //通过代币地址字典序判断交易方向
+    return zeroForOne ? MIN_SQRT_PRICE + 1n : MAX_SQRT_PRICE - 1n; //无限滑点兜底限价
+  };
+
   const requestIdRef = useRef(0);
 
   // 哪个输入框正在输入
@@ -96,7 +113,7 @@ export const SwapPage = () => {
               tokenOut: tokenOut.address,
               amountIn: formatToBigInt(debouncedAmountIn, tokenIn.decimals ?? 18),
               indexPath: [0],
-              sqrtPriceLimitX96: 0n,
+              sqrtPriceLimitX96: getSqrtPriceLimit(tokenIn.address, tokenOut.address),
             },
           ],
         });
@@ -149,7 +166,7 @@ export const SwapPage = () => {
               tokenOut: tokenOut.address,
               amountOut: formatToBigInt(debouncedAmountOut, tokenOut.decimals ?? 18),
               indexPath: [0],
-              sqrtPriceLimitX96: 0n,
+              sqrtPriceLimitX96: getSqrtPriceLimit(tokenIn.address, tokenOut.address),
             },
           ],
         });
