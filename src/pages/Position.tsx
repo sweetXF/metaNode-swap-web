@@ -37,8 +37,13 @@ export const PositionPage = () => {
     },
   });
 
-  const myPositions = positions ? positions.filter((p: Position) => p.owner === account) : [];
-  console.log(myPositions);
+  //过滤出当前钱包的仓位，并过滤出非空仓位
+  const myPositions = positions
+    ? positions.filter(
+        (p: Position) =>
+          p.owner === account && (p.liquidity > 0n || p.tokensOwed0 > 0n || p.tokensOwed1 > 0n)
+      )
+    : [];
 
   // 仓位池子 → 两个 (token, holder) pair
   const positionTokenInfos = useMemo(() => {
@@ -77,10 +82,6 @@ export const PositionPage = () => {
       setActionError('no Account');
       return;
     }
-    if (row.liquidity === 0n) {
-      setActionError('No liquidity to remove');
-      return;
-    }
 
     setActionError(undefined);
     setProcessing({ id: row.id, action: 'remove' });
@@ -89,20 +90,31 @@ export const PositionPage = () => {
       // const approved = await ensureApproved();
       // if (!approved) throw new Error('Approval not completed');
 
-      // 1. 先模拟交易、校验、拿 request，发现错误立即报，不花 gas
-      const { request } = await simulateContract(wagmiConfig, {
+      // ========== 第一步：burn 移除全部流动性（liquidity=0），本金+手续费金额计入 tokensOwed（NFT还在）==========
+      if (row.liquidity > 0n) {
+        const { request: reqBurn } = await simulateContract(wagmiConfig, {
+          address: positionManagerAddress,
+          abi: positionAbi,
+          functionName: 'burn',
+          args: [row.id],
+          account,
+        });
+        const burnHash = await writeContractAsync(reqBurn);
+        await waitForTransactionReceipt(wagmiConfig, { hash: burnHash });
+      }
+
+      // ========== 第二步：collect 提取全部本金+手续费，并销毁 NFT==========
+      const { request: reqCollect } = await simulateContract(wagmiConfig, {
         address: positionManagerAddress,
         abi: positionAbi,
-        functionName: 'burn',
-        args: [row.id],
+        functionName: 'collect',
+        args: [row.id, account],
         account,
       });
+      const collectHash = await writeContractAsync(reqCollect);
+      await waitForTransactionReceipt(wagmiConfig, { hash: collectHash });
 
-      // 2. 模拟成功，发送交易并等待上链
-      const hash = await writeContractAsync(request);
-      await waitForTransactionReceipt(wagmiConfig, { hash });
-
-      // 3. 成功后刷新列表
+      // 成功后刷新列表
       await refetch();
       alert('Remove success');
     } catch (error: unknown) {
@@ -117,14 +129,14 @@ export const PositionPage = () => {
     }
   };
 
-  //用户取手续费 / 奖励
+  //用户取手续费 / 奖励,并销毁 NFT(关闭仓位)
   const handleCollect = async (row: Position) => {
     if (!account) {
       setActionError('no Account');
       return;
     }
     if (row.tokensOwed0 === 0n && row.tokensOwed1 === 0n) {
-      setActionError('No tokens to collect');
+      setActionError('No tokensOwed to collect');
       return;
     }
     setActionError(undefined);
