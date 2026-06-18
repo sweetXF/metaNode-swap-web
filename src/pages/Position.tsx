@@ -103,7 +103,7 @@ export const PositionPage = () => {
         await waitForTransactionReceipt(wagmiConfig, { hash: burnHash });
       }
 
-      // ========== 第二步：collect 提取全部本金+手续费，并销毁 NFT==========
+      // ========== 第二步：collect 提取全部本金+手续费（tokensOwed0=0、tokensOwed1=0）转到用户，并销毁 NFT==========
       const { request: reqCollect } = await simulateContract(wagmiConfig, {
         address: positionManagerAddress,
         abi: positionAbi,
@@ -129,7 +129,7 @@ export const PositionPage = () => {
     }
   };
 
-  //用户取手续费 / 奖励,并销毁 NFT(关闭仓位)
+  //用户提取全部本金+手续费;如果liquidity=0，销毁NFT ，仓位从列表消失。
   const handleCollect = async (row: Position) => {
     if (!account) {
       setActionError('no Account');

@@ -3,6 +3,7 @@ import { getContractAddress } from '../config/contracts';
 import { poolAbi } from '../abi/PoolManager';
 import { zeroAddress, type Address } from 'viem';
 
+//根据代币对 + 数组下标，返回对应池子合约地址
 export const useCheckPoolExist = async (tokenA: Address, tokenB: Address, index: number) => {
   const chainId = useChainId();
   const contractAddress = getContractAddress(chainId, 'PoolManager');
