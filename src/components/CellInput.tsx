@@ -83,7 +83,8 @@ export const CellInput = ({
 {/* 输入框右侧文本 */}
              {endText && (
         <div className="flex flex-col border-l border-gray-200">
-         <span className="px-1.5 h-1/2 flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-600 disabled:cursor-not-allowed transition">{endText}
+         <span className="px-1.5 h-1/2 flex items-center justify-center text-gray-500">
+         {endText}
         </span>
         </div>
           )}
