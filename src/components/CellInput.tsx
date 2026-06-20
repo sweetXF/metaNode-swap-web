@@ -6,6 +6,8 @@ interface CellInputProps {
   step?: number;
   disabled?: boolean;
   unit?: string;
+  isAdjust?: boolean;
+  endText?: string;
 }
 
 export const CellInput = ({
@@ -15,6 +17,8 @@ export const CellInput = ({
   step = 1,
   disabled,
   unit,
+  isAdjust=true,
+  endText=''
 }: CellInputProps) => {
   const formatDecimal = (val: string): string => {
     return val
@@ -49,6 +53,7 @@ export const CellInput = ({
         />
 
         {/* 上下小箭头 */}
+        {isAdjust && (
         <div className="flex flex-col border-l border-gray-200">
           <button
             type="button"
@@ -73,6 +78,15 @@ export const CellInput = ({
             </svg>
           </button>
         </div>
+          )}
+
+{/* 输入框右侧文本 */}
+             {endText && (
+        <div className="flex flex-col border-l border-gray-200">
+         <span className="px-1.5 h-1/2 flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-600 disabled:cursor-not-allowed transition">{endText}
+        </span>
+        </div>
+          )}
       </div>
 
       {/* 输入框下方文案 */}

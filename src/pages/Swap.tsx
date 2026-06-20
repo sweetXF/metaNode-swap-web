@@ -12,6 +12,7 @@ import { formatBigInt, formatToBigInt } from '../utils/format';
 import { useDebounce } from '../hooks/useDebounce';
 import { formatUnits } from 'viem';
 import { useTokenList } from '../hooks/useTokenList';
+import { CellInput } from '../components/CellInput';
 
 export const SwapPage = () => {
   const chainId = useChainId();
@@ -19,6 +20,9 @@ export const SwapPage = () => {
   const isChainidMatch = curChainId === chainId;
 
   const SwapRouterAddress = getContractAddress(chainId, 'SwapRouter');
+
+  const [deadline,setDeadline]=useState('30');
+  const [maxSlippage,setMaxSlippage]=useState('5.5');
 
   const { tokenList } = useTokenList();
   const [tokenIn, setTokenIn] = useState<TokenInfo>();
@@ -224,6 +228,22 @@ export const SwapPage = () => {
   //  点击 Swap 按钮时触发
   const handleSwap = () => {
     console.log('swap', { tokenIn, tokenOut, amountIn });
+    if (!tokenIn || !tokenOut) {
+      setSwapError('Please select tokens');
+      return;
+    }
+    if (!amountIn) {
+      setSwapError('Amount in must be greater than 0');
+      return;
+    }
+    if(+maxSlippage<0||+maxSlippage>100){
+      setSwapError('Max slippage must be between 0 and 100');
+      return;
+    }
+    if (+deadline<30||+deadline>4320){
+      setSwapError('Deadline must be between 30 and 4320');
+      return;
+    }
     // TODO: 调 SwapRouter
   };
 
@@ -232,6 +252,33 @@ export const SwapPage = () => {
       <div className="max-w-md mx-auto">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <p className="text-2xl font-semibold text-gray-900 mb-2 text-center py-2">Swap</p>
+          <div className="grid grid-cols-2 gap-3 text-left">
+              <p className="text-sm pt-3 pb-1">
+                  Max slippage
+                </p>
+                 <p className="text-sm pt-3 pb-1">
+                  Deadline
+                </p>
+          </div>
+         
+          <div className="grid grid-cols-2 gap-3 pb-3">
+                            <CellInput
+                              value={maxSlippage}
+                              onChange={setMaxSlippage}
+                              placeholder="max slippage"
+                              disabled={!tokenIn || !tokenOut}
+                              isAdjust={false}
+                              endText='%'
+                            />
+                            <CellInput
+                              value={deadline}
+                              onChange={setDeadline}
+                              placeholder="deadline"
+                              disabled={!tokenIn || !tokenOut}
+                              isAdjust={false}
+                              endText='min'
+                            />
+                          </div>
           <div className="space-y-1">
             <AmountInput
               token={tokenIn}
