@@ -13,6 +13,7 @@ import { TokenPair } from '../components/TokenPair';
 import { useTokenInfos } from '../hooks/useTokenInfos';
 import { type Position } from '../config/types';
 import { formatBigInt } from '../utils/format';
+import { errorMsg } from '../config/errorMsg';
 
 export const PositionPage = () => {
   const chainId = useChainId(); // 项目wagmi配置的链 id
@@ -118,11 +119,7 @@ export const PositionPage = () => {
       await refetch();
       alert('Remove success');
     } catch (error: unknown) {
-      const msg =
-        (error as { shortMessage?: string; message?: string })?.shortMessage ||
-        (error as Error)?.message ||
-        'Remove failed';
-      console.error('Remove failed:', error);
+      const msg = errorMsg(error, 'Remove failed');
       setActionError(msg);
     } finally {
       setProcessing(null);
@@ -154,11 +151,7 @@ export const PositionPage = () => {
       await refetch();
       alert('Collect success');
     } catch (error: unknown) {
-      const msg =
-        (error as { shortMessage?: string; message?: string })?.shortMessage ||
-        (error as Error)?.message ||
-        'Collect failed';
-      console.error('Collect failed:', error);
+      const msg = errorMsg(error, 'Collect failed');
       setActionError(msg);
     } finally {
       setProcessing(null);

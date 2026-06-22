@@ -27,6 +27,7 @@ import { Selecting, type Pool, type TokenInfo } from '../config/types';
 import { useTokenList } from '../hooks/useTokenList';
 import { usePositionApproval } from '../hooks/usePositionApproval';
 import { positionAbi } from '../abi/PositionManager';
+import { errorMsg } from '../config/errorMsg';
 
 export const PoolPage = () => {
   const navigate = useNavigate();
@@ -177,11 +178,8 @@ export const PoolPage = () => {
       await refetch();
       alert('Add pool success');
     } catch (error: unknown) {
-      const message =
-        (error as { shortMessage?: string; message?: string })?.shortMessage ||
-        (error as Error)?.message ||
-        'Add pool failed';
-      setAddPoolError(message);
+      const msg = errorMsg(error, 'Add pool failed');
+      setAddPoolError(msg);
     }
   };
 
@@ -315,11 +313,8 @@ export const PoolPage = () => {
       //await refetch(); //刷新pool列表(liquidity 列会变)
       navigate('/position'); //跳转到position页面,刷新position列表
     } catch (error: unknown) {
-      const message =
-        (error as { shortMessage?: string; message?: string })?.shortMessage ||
-        (error as Error)?.message ||
-        'Add position failed';
-      setAddPositonError(message);
+      const msg = errorMsg(error, 'Add position failed');
+      setAddPositonError(msg);
     }
   };
 

@@ -14,6 +14,7 @@ import { formatUnits } from 'viem';
 import { useTokenList } from '../hooks/useTokenList';
 import { CellInput } from '../components/CellInput';
 import { getSwapBestPoolAndPriceLimit } from '../utils/getSwapBestPoolAndPriceLimit';
+import { errorMsg } from '../config/errorMsg';
 
 export const SwapPage = () => {
   const chainId = useChainId();
@@ -142,11 +143,7 @@ export const SwapPage = () => {
         setSwapError('');
       } catch (error: unknown) {
         if (reqId !== requestIdRef.current) return; // 过期错误也丢弃
-        const msg =
-          (error as { shortMessage?: string; message?: string })?.shortMessage ||
-          (error as Error)?.message ||
-          'Failed to get quote';
-        console.error('quoteExactInput failed:', error);
+        const msg = errorMsg(error, 'quoteExactInput failed');
         setSwapError(msg);
         setAmountOut('');
       }
@@ -202,11 +199,7 @@ export const SwapPage = () => {
         setSwapError('');
       } catch (error: unknown) {
         if (reqId !== requestIdRef.current) return;
-        const msg =
-          (error as { shortMessage?: string; message?: string })?.shortMessage ||
-          (error as Error)?.message ||
-          'Failed to get quote';
-        console.error('quoteExactOutput failed:', error);
+        const msg = errorMsg(error, 'quoteExactOutput failed');
         setSwapError(msg);
         setAmountIn('');
       }
@@ -252,8 +245,12 @@ export const SwapPage = () => {
   }, [tokenIn, tokenOut]);
 
   //  点击 Swap 按钮时触发
-  const handleSwap = () => {
+  const handleSwap = async () => {
     console.log('swap', { tokenIn, tokenOut, amountIn, amountOut, maxSlippage, deadline });
+    if (!account) {
+      setSwapError('Please connect your wallet');
+      return;
+    }
     if (!tokenIn || !tokenOut) {
       setSwapError('Please select tokens');
       return;
@@ -270,7 +267,40 @@ export const SwapPage = () => {
       setSwapError('Deadline must be between 30 and 4320');
       return;
     }
-    // TODO: 调 SwapRouter
+    // 调 SwapRouter exactInput
+    try {
+      const { bestPoolIndex, sqrtPriceLimit } = await getSwapBestPoolAndPriceLimit(
+        chainId,
+        tokenIn.address,
+        tokenOut.address,
+        maxSlippage,
+        false
+      );
+      const { request: reqInput } = await simulateContract(wagmiConfig, {
+        address: SwapRouterAddress,
+        abi: swapRouterAbi,
+        functionName: 'exactInput',
+        args: [
+          {
+            tokenIn: tokenIn.address,
+            tokenOut: tokenOut.address,
+            indexPath: [bestPoolIndex],
+            recipient: account,
+            deadline: formatToBigInt(deadline, 18),
+            amountIn: formatToBigInt(amountIn, tokenIn.decimals ?? 18),
+            amountOutMinimum: formatToBigInt(amountOut, tokenOut.decimals ?? 18),
+            sqrtPriceLimitX96: sqrtPriceLimit,
+          },
+        ],
+        account,
+      });
+      const hashInput = await writeContractAsync(reqInput);
+      await waitForTransactionReceipt(wagmiConfig, { hash: hashInput });
+      alert('Swap success');
+    } catch (error: unknown) {
+      const msg = errorMsg(error, 'Swap failed');
+      setSwapError(msg);
+    }
   };
 
   return (
