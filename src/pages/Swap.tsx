@@ -13,6 +13,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { formatUnits } from 'viem';
 import { useTokenList } from '../hooks/useTokenList';
 import { CellInput } from '../components/CellInput';
+import { getSwapBestPoolAndPriceLimit } from '../utils/getSwapBestPoolAndPriceLimit';
 
 export const SwapPage = () => {
   const chainId = useChainId();
@@ -21,8 +22,8 @@ export const SwapPage = () => {
 
   const SwapRouterAddress = getContractAddress(chainId, 'SwapRouter');
 
-  const [deadline,setDeadline]=useState('30');
-  const [maxSlippage,setMaxSlippage]=useState('5.5');
+  const [deadline, setDeadline] = useState('30'); //延迟时间，分钟
+  const [maxSlippage, setMaxSlippage] = useState('5.5'); //最大滑点，百分比
 
   const { tokenList } = useTokenList();
   const [tokenIn, setTokenIn] = useState<TokenInfo>();
@@ -40,7 +41,7 @@ export const SwapPage = () => {
    * zeroForOne = true（token0 → token1 卖出 token0, 买入 token1,价格下行）：sqrtPriceLimitX96 必须 小于当前价格，且大于最小价格。价格跌到 sqrtPriceLimitX96 就停止交易，防止滑点过大、亏太多
    * zeroForOne = false（token1 → token0 卖出 token1,买入 token0,价格上行）：sqrtPriceLimitX96 必须 大于当前价格，且小于最大价格
    */
-  // 价格边界常量
+  // 价格边界常量, 池子允许的最小、最大 sqrtPriceX96
   const MIN_SQRT_PRICE = 4295128739n; //池子能到达的最低开方价格（对应 tick 下限）
   const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342n; //池子能到达的最高开方价格（对应 tick 上限）
   /**根据交易方向计算合法的 sqrtPriceLimitX96。
@@ -78,11 +79,15 @@ export const SwapPage = () => {
         setTokenOut(tokenIn);
       }
       setTokenIn(token);
+      setAmountIn('');
+      setAmountOut('');
     } else if (selecting === Selecting.Out) {
       if (token.address === tokenIn.address) {
         setTokenIn(tokenOut);
       }
       setTokenOut(token);
+      setAmountIn('');
+      setAmountOut('');
     }
   };
 
@@ -107,6 +112,14 @@ export const SwapPage = () => {
         return;
       }
       try {
+        const { bestPoolIndex } = await getSwapBestPoolAndPriceLimit(
+          chainId,
+          tokenIn.address,
+          tokenOut.address,
+          maxSlippage,
+          true
+        );
+
         const { result: outRaw } = await simulateContract(wagmiConfig, {
           address: SwapRouterAddress,
           abi: swapRouterAbi,
@@ -116,7 +129,7 @@ export const SwapPage = () => {
               tokenIn: tokenIn.address,
               tokenOut: tokenOut.address,
               amountIn: formatToBigInt(debouncedAmountIn, tokenIn.decimals ?? 18),
-              indexPath: [0],
+              indexPath: [bestPoolIndex],
               sqrtPriceLimitX96: getSqrtPriceLimit(tokenIn.address, tokenOut.address),
             },
           ],
@@ -159,6 +172,13 @@ export const SwapPage = () => {
         return;
       }
       try {
+        const { bestPoolIndex } = await getSwapBestPoolAndPriceLimit(
+          chainId,
+          tokenIn.address,
+          tokenOut.address,
+          maxSlippage,
+          false
+        );
         // 询价
         const { result: inRaw } = await simulateContract(wagmiConfig, {
           address: SwapRouterAddress,
@@ -169,7 +189,7 @@ export const SwapPage = () => {
               tokenIn: tokenIn.address,
               tokenOut: tokenOut.address,
               amountOut: formatToBigInt(debouncedAmountOut, tokenOut.decimals ?? 18),
-              indexPath: [0],
+              indexPath: [bestPoolIndex],
               sqrtPriceLimitX96: getSqrtPriceLimit(tokenIn.address, tokenOut.address),
             },
           ],
@@ -218,7 +238,13 @@ export const SwapPage = () => {
     }
   }, [inputSource, fetchQuoteIn, fetchQuoteOut]);
 
+  // token 变化时，重置所有状态
   useEffect(() => {
+    // 作废所有在途/即将由旧防抖值触发的询价：
+    // 切 token 时 fetchQuoteIn/Out 会因依赖变化被重建并触发一次询价，
+    // 但此时 debouncedAmountIn/Out 仍是旧值，会把刚清空的金额重新填回来。
+    // 自增 requestId 后，那笔旧询价 resolve 时 reqId 不匹配会被丢弃。
+    requestIdRef.current++;
     setAmountOut('');
     setAmountIn('');
     setSwapError('');
@@ -227,7 +253,7 @@ export const SwapPage = () => {
 
   //  点击 Swap 按钮时触发
   const handleSwap = () => {
-    console.log('swap', { tokenIn, tokenOut, amountIn });
+    console.log('swap', { tokenIn, tokenOut, amountIn, amountOut, maxSlippage, deadline });
     if (!tokenIn || !tokenOut) {
       setSwapError('Please select tokens');
       return;
@@ -236,11 +262,11 @@ export const SwapPage = () => {
       setSwapError('Amount in must be greater than 0');
       return;
     }
-    if(+maxSlippage<0||+maxSlippage>100){
+    if (+maxSlippage < 0 || +maxSlippage > 100) {
       setSwapError('Max slippage must be between 0 and 100');
       return;
     }
-    if (+deadline<30||+deadline>4320){
+    if (+deadline < 30 || +deadline > 4320) {
       setSwapError('Deadline must be between 30 and 4320');
       return;
     }
@@ -253,32 +279,28 @@ export const SwapPage = () => {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <p className="text-2xl font-semibold text-gray-900 mb-2 text-center py-2">Swap</p>
           <div className="grid grid-cols-2 gap-3 text-left">
-              <p className="text-sm pt-3 pb-1">
-                  Max slippage
-                </p>
-                 <p className="text-sm pt-3 pb-1">
-                  Deadline
-                </p>
+            <p className="text-sm pt-3 pb-1">Max slippage</p>
+            <p className="text-sm pt-3 pb-1">Deadline</p>
           </div>
-         
+
           <div className="grid grid-cols-2 gap-3 pb-3">
-                            <CellInput
-                              value={maxSlippage}
-                              onChange={setMaxSlippage}
-                              placeholder="max slippage"
-                              disabled={!tokenIn || !tokenOut}
-                              isAdjust={false}
-                              endText='%'
-                            />
-                            <CellInput
-                              value={deadline}
-                              onChange={setDeadline}
-                              placeholder="deadline"
-                              disabled={!tokenIn || !tokenOut}
-                              isAdjust={false}
-                              endText='min'
-                            />
-                          </div>
+            <CellInput
+              value={maxSlippage}
+              onChange={setMaxSlippage}
+              placeholder="max slippage"
+              disabled={!tokenIn || !tokenOut}
+              isAdjust={false}
+              endText="%"
+            />
+            <CellInput
+              value={deadline}
+              onChange={setDeadline}
+              placeholder="deadline"
+              disabled={!tokenIn || !tokenOut}
+              isAdjust={false}
+              endText="min"
+            />
+          </div>
           <div className="space-y-1">
             <AmountInput
               token={tokenIn}

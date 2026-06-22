@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
  * 防抖 Hook
@@ -7,13 +7,16 @@ import { useState, useEffect } from 'react';
  */
 export function useDebounce<T>(value: T, delay = 300): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const timer = setTimeout(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
       setDebouncedValue(value);
     }, delay);
 
-    return () => clearTimeout(timer);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
   }, [value, delay]);
 
   return debouncedValue;

@@ -26,18 +26,20 @@ export const TokenList = ({
     onClose();
   };
 
-  const [keyword, setKeyword] = useState('');//输入实时值
-  const [searchValue, setSearchValue] = useState('');//防抖后的最终值
+  const [keyword, setKeyword] = useState(''); //输入实时值
+  const [searchValue, setSearchValue] = useState(''); //防抖后的最终值
 
   // 搜索框 防抖
-  const timer=useRef(null);
-  useEffect(()=>{
-    clearTimeout(timer.current);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       setSearchValue(keyword.trim());
     }, 300);
-    return () => clearTimeout(timer.current);
-  },[keyword])
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [keyword]);
 
   const handleClear = () => {
     setKeyword('');
@@ -56,9 +58,7 @@ export const TokenList = ({
     if (!searchValue) return tokens;
     const sv = searchValue.toLowerCase();
     return tokens.filter(
-      token =>
-        token.symbol?.toLowerCase().includes(sv) ||
-        token.address.toLowerCase().includes(sv),
+      token => token.symbol?.toLowerCase().includes(sv) || token.address.toLowerCase().includes(sv)
     );
   }, [tokens, searchValue]);
 
@@ -66,34 +66,44 @@ export const TokenList = ({
     <Modal title="Select Token" isOpen={open} onClose={onClose}>
       {/* 搜索框 */}
       <div className="w-full max-w-md mb-4">
-      <div className="relative">
-        <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <input
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="输入 token 名称或地址搜索..."
-          className="w-full pl-10 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-400 outline-none transition"
-        />
-        {/* 清除按钮：有文字才显示 */}
-        {keyword && (
-          <button
-            onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+        <div className="relative">
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          <input
+            value={keyword}
+            onChange={e => setKeyword(e.target.value)}
+            placeholder="输入 token 名称或地址搜索..."
+            className="w-full pl-10 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-400 outline-none transition"
+          />
+          {/* 清除按钮：有文字才显示 */}
+          {keyword && (
+            <button
+              onClick={handleClear}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
-    </div>
 
       {/* token列表 */}
       <div className="space-y-1">
