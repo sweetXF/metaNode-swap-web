@@ -12,6 +12,7 @@ interface AmountInputProps {
   showMax?: boolean; //是否显示 Max 按钮（点击后amount是最大值，全部都卖出）
   readOnly?: boolean; //是否只读
   USDValue?: string | number; //美元估值
+  swapPla?: string;
 }
 
 export const AmountInput = ({
@@ -23,6 +24,7 @@ export const AmountInput = ({
   showBalance = true,
   readOnly = false,
   USDValue,
+  swapPla = '',
 }: AmountInputProps) => {
   const tokenAddrs = useMemo(() => {
     return token ? [{ token: token.address }] : [];
@@ -67,7 +69,7 @@ export const AmountInput = ({
           value={amount}
           onChange={handleInput}
           readOnly={readOnly}
-          placeholder={readOnly ? 'no' : '0'}
+          placeholder={readOnly ? 'no' : swapPla ? swapPla : '0'}
           className="flex-1 min-w-0 bg-transparent text-3xl font-medium outline-none placeholder:text-gray-300"
         />
 

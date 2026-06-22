@@ -3,7 +3,6 @@ import { AmountInput } from '../components/AmountInput';
 import { TokenList } from '../components/TokenList';
 import { Selecting, type TokenInfo } from '../config/types';
 import { useAccount, useChainId, useWriteContract } from 'wagmi';
-import { usePositionApproval } from '../hooks/usePositionApproval';
 import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
 import { getContractAddress } from '../config/contracts';
@@ -15,6 +14,7 @@ import { useTokenList } from '../hooks/useTokenList';
 import { CellInput } from '../components/CellInput';
 import { getSwapBestPoolAndPriceLimit } from '../utils/getSwapBestPoolAndPriceLimit';
 import { errorMsg } from '../config/errorMsg';
+import { useErc20Approval } from '../hooks/useErc20Approval';
 
 export const SwapPage = () => {
   const chainId = useChainId();
@@ -61,7 +61,6 @@ export const SwapPage = () => {
   type InputSource = 'in' | 'out' | null;
   const [inputSource, setInputSource] = useState<InputSource>(null);
 
-  // const { isApproved, ensureApproved } = usePositionApproval();
   const { writeContractAsync } = useWriteContract();
   const [swapError, setSwapError] = useState('');
 
@@ -244,19 +243,14 @@ export const SwapPage = () => {
     setInputSource(null);
   }, [tokenIn, tokenOut]);
 
+  const { approveToken, ensureApprovedAllowance } = useErc20Approval(
+    tokenIn?.address,
+    SwapRouterAddress
+  );
   //  点击 Swap 按钮时触发
   const handleSwap = async () => {
-    console.log('swap', { tokenIn, tokenOut, amountIn, amountOut, maxSlippage, deadline });
     if (!account) {
       setSwapError('Please connect your wallet');
-      return;
-    }
-    if (!tokenIn || !tokenOut) {
-      setSwapError('Please select tokens');
-      return;
-    }
-    if (!amountIn) {
-      setSwapError('Amount in must be greater than 0');
       return;
     }
     if (+maxSlippage < 0 || +maxSlippage > 100) {
@@ -267,35 +261,123 @@ export const SwapPage = () => {
       setSwapError('Deadline must be between 30 and 4320');
       return;
     }
-    // 调 SwapRouter exactInput
+    if (!tokenIn || !tokenOut) {
+      setSwapError('Please select tokens');
+      return;
+    }
+    if (!amountIn || !amountOut) {
+      setSwapError('Please enter amount');
+      return;
+    }
+    // 校验用户输入的那一侧 > 0
+    if (!+amountIn && inputSource === 'in') {
+      setSwapError('Amount in must be greater than 0');
+      return;
+    }
+    if (!+amountOut && inputSource === 'out') {
+      setSwapError('Amount out must be greater than 0');
+      return;
+    }
+    // 校验询价回填的另一侧是否就绪; 如果另一侧未就绪，返回
+    if (!inputSource) return;
+    if (inputSource === 'in' && !amountOut) {
+      setSwapError('Quote not ready, please wait');
+      return;
+    }
+    if (inputSource === 'out' && !amountIn) {
+      setSwapError('Quote not ready, please wait');
+      return;
+    }
+
+    const rawAmountIn = formatToBigInt(amountIn, tokenIn.decimals ?? 18);
+    const rawAmountOut = formatToBigInt(amountOut, tokenOut.decimals ?? 18);
+
+    const slippageBps = BigInt(Math.round(+maxSlippage * 100));
+
+    // deadline：当前时间戳 + 分钟*60（合约要求秒级时间戳）
+    const now = Math.floor(Date.now() / 1000);
+    const deadlineTs = BigInt(now + Number(deadline) * 60);
+    // 调 SwapRouter 的 exactInput、 exactOutput
     try {
-      const { bestPoolIndex, sqrtPriceLimit } = await getSwapBestPoolAndPriceLimit(
-        chainId,
-        tokenIn.address,
-        tokenOut.address,
-        maxSlippage,
-        false
-      );
-      const { request: reqInput } = await simulateContract(wagmiConfig, {
-        address: SwapRouterAddress,
-        abi: swapRouterAbi,
-        functionName: 'exactInput',
-        args: [
-          {
-            tokenIn: tokenIn.address,
-            tokenOut: tokenOut.address,
-            indexPath: [bestPoolIndex],
-            recipient: account,
-            deadline: formatToBigInt(deadline, 18),
-            amountIn: formatToBigInt(amountIn, tokenIn.decimals ?? 18),
-            amountOutMinimum: formatToBigInt(amountOut, tokenOut.decimals ?? 18),
-            sqrtPriceLimitX96: sqrtPriceLimit,
-          },
-        ],
-        account,
-      });
-      const hashInput = await writeContractAsync(reqInput);
-      await waitForTransactionReceipt(wagmiConfig, { hash: hashInput });
+      if (inputSource === 'in') {
+        //是否授权足够额度
+        const approveTokenIn = await ensureApprovedAllowance(rawAmountIn);
+        if (!approveTokenIn) {
+          setSwapError('Please approve token in');
+          return;
+        }
+        // 固定输入，最小输出 = 预期输出 * (1-滑点)
+        const minAmountOutRaw = (rawAmountOut * (10000n - slippageBps)) / 10000n;
+
+        //获取最优池和限价
+        const { bestPoolIndex, sqrtPriceLimit } = await getSwapBestPoolAndPriceLimit(
+          chainId,
+          tokenIn.address,
+          tokenOut.address,
+          maxSlippage,
+          true
+        );
+        const { request } = await simulateContract(wagmiConfig, {
+          address: SwapRouterAddress,
+          abi: swapRouterAbi,
+          functionName: 'exactInput',
+          args: [
+            {
+              tokenIn: tokenIn.address,
+              tokenOut: tokenOut.address,
+              indexPath: [bestPoolIndex],
+              recipient: account,
+              deadline: deadlineTs,
+              amountIn: rawAmountIn,
+              amountOutMinimum: minAmountOutRaw,
+              sqrtPriceLimitX96:
+                sqrtPriceLimit ?? getSqrtPriceLimit(tokenIn.address, tokenOut.address),
+            },
+          ],
+          account,
+        });
+        const hash = await writeContractAsync(request);
+        await waitForTransactionReceipt(wagmiConfig, { hash });
+      } else if (inputSource === 'out') {
+        // 固定输出，最大输入 = 预期输入 * (1+滑点)
+        const maxAmountInRaw = (rawAmountIn * (10000n + slippageBps)) / 10000n;
+        //是否授权足够额度
+        const approveTokenIn = await ensureApprovedAllowance(maxAmountInRaw);
+        if (!approveTokenIn) {
+          setSwapError('Please approve token in');
+          return;
+        }
+
+        //获取最优池和限价
+        const { bestPoolIndex, sqrtPriceLimit } = await getSwapBestPoolAndPriceLimit(
+          chainId,
+          tokenIn.address,
+          tokenOut.address,
+          maxSlippage,
+          false
+        );
+        const { request } = await simulateContract(wagmiConfig, {
+          address: SwapRouterAddress,
+          abi: swapRouterAbi,
+          functionName: 'exactOutput',
+          args: [
+            {
+              tokenIn: tokenIn.address,
+              tokenOut: tokenOut.address,
+              indexPath: [bestPoolIndex],
+              recipient: account,
+              deadline: deadlineTs,
+              amountOut: rawAmountOut,
+              amountInMaximum: maxAmountInRaw,
+              sqrtPriceLimitX96:
+                sqrtPriceLimit ?? getSqrtPriceLimit(tokenIn.address, tokenOut.address),
+            },
+          ],
+          account,
+        });
+        const hash = await writeContractAsync(request);
+        await waitForTransactionReceipt(wagmiConfig, { hash });
+      }
       alert('Swap success');
     } catch (error: unknown) {
       const msg = errorMsg(error, 'Swap failed');
@@ -337,6 +419,7 @@ export const SwapPage = () => {
               amount={amountIn}
               onAmountChange={handleAmountInChange}
               onTokenSelect={() => setSelecting(Selecting.In)}
+              swapPla="出售"
               showMax
             />
 
@@ -345,7 +428,7 @@ export const SwapPage = () => {
               amount={amountOut}
               onAmountChange={handleAmountOutChange}
               onTokenSelect={() => setSelecting(Selecting.Out)}
-              // readOnly
+              swapPla="购买"
             />
           </div>
 
@@ -367,7 +450,7 @@ export const SwapPage = () => {
 
           <button
             onClick={handleSwap}
-            disabled={!amountIn || Number(amountIn) === 0 || !isConnected || !isChainidMatch}
+            disabled={!amountIn || !amountOut || !isConnected || !isChainidMatch}
             className="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             {isConnected ? (isChainidMatch ? 'Swap' : 'Connect to Sepolia') : 'Connect wallet'}
