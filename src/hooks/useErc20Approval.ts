@@ -64,6 +64,7 @@ export const useErc20Approval = (tokenAddress?: `0x${string}`, spender?: `0x${st
   return {
     allowance,
     isApproving,
+    refetchAllowance,
     approveToken,
     ensureApprovedAllowance,
   };

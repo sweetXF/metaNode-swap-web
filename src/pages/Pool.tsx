@@ -18,16 +18,15 @@ import { useNavigate } from 'react-router-dom';
 import { Modal } from '../components/Modal';
 import { ModalFooter } from '../components/ModalFooter';
 import { AmountInput } from '../components/AmountInput';
-import { FeeTierSelect } from '../components/FeeTierSelect';
 import { CellInput } from '../components/CellInput';
 import { TokenList } from '../components/TokenList';
 import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
 import { Selecting, type Pool, type TokenInfo } from '../config/types';
 import { useTokenList } from '../hooks/useTokenList';
-import { usePositionApproval } from '../hooks/usePositionApproval';
 import { positionAbi } from '../abi/PositionManager';
 import { errorMsg } from '../config/errorMsg';
+import { useErc20Approval } from '../hooks/useErc20Approval';
 
 export const PoolPage = () => {
   const navigate = useNavigate();
@@ -64,7 +63,6 @@ export const PoolPage = () => {
   const [amountOut, setAmountOut] = useState('');
   const [addPositionFee, setAddPositionFee] = useState<number>(0);
   const [addPositionCurPool, setAddPositionCurPool] = useState<Pool>();
-  const { isApproved, ensureApproved } = usePositionApproval();
 
   const {
     data: pools,
@@ -193,14 +191,17 @@ export const PoolPage = () => {
     setAddPositionTokenIn(token0Info);
     setAddPositionTokenOut(token1Info);
     setAddPositionFee(pool.fee);
+    setAmountIn('');
+    setAmountOut('');
+    setAddPositonError('');
   };
 
   //token授权
-  const { allowance: allowance0, ensureApprovedAllowance: ensureApprovedAllowance0 } =
-    usePositionApproval(addPositionTokenIn?.address);
+  const { isApproving: isApproving0, ensureApprovedAllowance: ensureApprovedAllowance0 } =
+    useErc20Approval(addPositionTokenIn?.address);
 
-  const { allowance: allowance1, ensureApprovedAllowance: ensureApprovedAllowance1 } =
-    usePositionApproval(addPositionTokenOut?.address);
+  const { isApproving: isApproving1, ensureApprovedAllowance: ensureApprovedAllowance1 } =
+    useErc20Approval(addPositionTokenOut?.address);
 
   // add position：按"当前钱包"读取ERC20两种 token 余额（holder 省略 → 默认当前账户，区别于池子余额），检验余额是否足够
   const positionUserPairs = useMemo(() => {
@@ -230,7 +231,8 @@ export const PoolPage = () => {
     const decimalsOut = addPositionTokenOut.decimals ?? 18;
     const amountInRaw = formatToBigInt(amountIn, decimalsIn);
     // 判断 amountIn 这一边到底是不是池子的 token0
-    const isInToken0 = addPositionTokenIn.address === addPositionCurPool.token0;
+    const isInToken0 =
+      addPositionTokenIn.address.toLowerCase() === addPositionCurPool.token0.toLowerCase();
     //算出 amountOut raw
     const amountOutRaw = getPairedAmount(
       addPositionCurPool.sqrtPriceX96,
@@ -239,7 +241,7 @@ export const PoolPage = () => {
       amountInRaw,
       isInToken0
     );
-    setAmountOut(amountOutRaw > 0n ? formatBigInt(amountOutRaw, decimalsOut, 8) : '0');
+    setAmountOut(amountOutRaw > 0n ? formatBigInt(amountOutRaw, decimalsOut, 10) : '0');
   }, [amountIn, addPositionCurPool, addPositionTokenIn, addPositionTokenOut]);
 
   // Add position
@@ -255,48 +257,72 @@ export const PoolPage = () => {
       setAddPositonError('Amount must be greater than 0');
       return;
     }
-    const needAmount0 = formatToBigInt(amountIn, addPositionTokenIn.decimals ?? 18);
-    const needAmount1 = formatToBigInt(amountOut, addPositionTokenOut.decimals ?? 18);
-    // 余额未加载完（undefined）时不拦截，避免误报
-    if (balance0 !== undefined && balance0 < needAmount0) {
+    // In 这边用用户输入的全精度数量；Out 这边按"当前价 + 区间"重新算 raw，
+    // 避免直接复用显示用的 10 位截断值（amountOut）造成精度损失导致合约校验失败
+    const decimalsIn = addPositionTokenIn.decimals ?? 18;
+    const rawAmountIn = formatToBigInt(amountIn, decimalsIn);
+    // 大小写不敏感比较：换过 token 后 In 的地址来自 tokenList，可能与 pool.token0 不同
+    const isInToken0 = addPositionTokenIn.address.toLowerCase() === pool.token0.toLowerCase();
+    const rawAmountOut = getPairedAmount(
+      pool.sqrtPriceX96,
+      pool.tickLower,
+      pool.tickUpper,
+      rawAmountIn,
+      isInToken0
+    );
+    if (rawAmountOut <= 0n) {
+      setAddPositonError('Invalid amount for current price range');
+      return;
+    }
+
+    // 余额校验（按 In/Out 各自对应的 token；余额未加载完 undefined 时不拦截，避免误报）
+    if (balance0 !== undefined && balance0 < rawAmountIn) {
       setAddPositonError(`${addPositionTokenIn.symbol ?? 'token0'} balance not enough`);
       return;
     }
-    if (balance1 !== undefined && balance1 < needAmount1) {
+    if (balance1 !== undefined && balance1 < rawAmountOut) {
       setAddPositonError(`${addPositionTokenOut.symbol ?? 'token1'} balance not enough`);
       return;
     }
 
     setAddPositionCurPool(pool);
-    //先确保NFT授权PositionManager
-    const NFTApprove = await ensureApproved();
-    if (!NFTApprove) {
-      setAddPositonError('NFT approve failed');
+
+    // 校验并自动授权(ensureApprovedAllowance)：In/Out 各授权自己实际转出的数量
+    const approveTokenIn = await ensureApprovedAllowance0(rawAmountIn);
+    if (!approveTokenIn) {
+      setAddPositonError(`${addPositionTokenIn.symbol ?? 'token0'} approve failed`);
       return;
     }
-    // 校验并自动授权(ensureApprovedAllowance) token0、token1
-    const amount0Desired = formatToBigInt(amountIn, addPositionTokenIn.decimals ?? 18);
-    const amount1Desired = formatToBigInt(amountOut, addPositionTokenOut.decimals ?? 18);
-    const approveToken0 = await ensureApprovedAllowance0(amount0Desired);
-    if (!approveToken0) {
-      setAddPositonError('token0 approve failed');
+    const approveTokenOut = await ensureApprovedAllowance1(rawAmountOut);
+    if (!approveTokenOut) {
+      setAddPositonError(`${addPositionTokenOut.symbol ?? 'token1'} approve failed`);
       return;
     }
-    const approveToken1 = await ensureApprovedAllowance1(amount1Desired);
-    if (!approveToken1) {
-      setAddPositonError('token1 approve failed');
-      return;
-    }
+
+    // mint 的 amount0Desired/amount1Desired 必须对应池子的 token0/token1，
+    // 不能绑死 In/Out（用户在弹窗里换过 token 时 In 可能是 token1）
+    const amount0Desired = isInToken0 ? rawAmountIn : rawAmountOut;
+    const amount1Desired = isInToken0 ? rawAmountOut : rawAmountIn;
+
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 30);
     try {
+      // 便于核对池子定位是否正确
+      console.log('mint pool lookup =>', {
+        token0: pool.token0,
+        token1: pool.token1,
+        index: pool.index,
+        poolAddress: pool.pool,
+        amount0Desired,
+        amount1Desired,
+      });
       const { request } = await simulateContract(wagmiConfig, {
         address: positionManagerAddress,
         abi: positionAbi,
         functionName: 'mint',
         args: [
           {
-            token0: addPositionCurPool.token0,
-            token1: addPositionCurPool.token1,
+            token0: pool.token0,
+            token1: pool.token1,
             index: pool.index,
             amount0Desired,
             amount1Desired,
@@ -549,7 +575,7 @@ export const PoolPage = () => {
                   <ModalFooter
                     onClose={() => setOpenAddPosition(false)}
                     isDisabled={isPendingPosition}
-                    isApproved={isApproved}
+                    isApproving={isApproving0 || isApproving1}
                     handleAddClick={() => {
                       if (!addPositionCurPool) return;
                       handleAddPosition(addPositionCurPool);
