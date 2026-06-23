@@ -632,11 +632,14 @@ export const PoolPage = () => {
 
                 {/* Token 选择弹窗（只渲染一次，根据 selecting 状态决定开关） */}
                 <TokenList
-                  tokens={tokenList}
+                  tokens={[addPositionTokenIn, addPositionTokenOut].filter(
+                    (t): t is TokenInfo => t !== undefined
+                  )}
                   open={positionSelecting !== undefined}
                   onClose={() => setPositionSelecting(undefined)}
                   onSelect={handlePositionSelectToken}
                   selected={positionSelectedToken}
+                  isSearch={false}
                   // 如果不想要"自动交换in Out"行为，可选：直接禁选（置灰）列表中另一边的token
                   // disabledAddresses={
                   //   positionSelecting === Selecting.In ? [positionTokenOut.address] :
