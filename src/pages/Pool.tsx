@@ -149,31 +149,58 @@ export const PoolPage = () => {
       return;
     }
 
+    // 合约强制 token0 < token1（按地址排序），不能绑死 tokenIn/tokenOut，
+    // 否则用户换过 token（tokenIn.address > tokenOut.address）就会 revert: "token0 must be less than token1"
+    const inIsToken0 = tokenIn.address.toLowerCase() < tokenOut.address.toLowerCase();
+    const token0 = inIsToken0 ? tokenIn : tokenOut;
+    const token1 = inIsToken0 ? tokenOut : tokenIn;
+    const decimals0 = token0.decimals ?? 18;
+    const decimals1 = token1.decimals ?? 18;
+
+    // 用户输入的价格语义是 price=token1/token0。
+    // 一旦按地址排序发生交换，价格语义反转为 1/price，区间上下界也要对调。
+    const curP = inIsToken0 ? currentPrice : (1 / +currentPrice).toString();
+    const lowP = inIsToken0 ? lowPrice : (1 / +highPrice).toString();
+    const highP = inIsToken0 ? highPrice : (1 / +lowPrice).toString();
+
+    const tickLower = priceToTick(lowP, decimals0, decimals1);
+    const tickUpper = priceToTick(highP, decimals0, decimals1);
+    const sqrtPriceX96 = priceToSqrtPriceX96(curP, decimals0, decimals1);
+
     try {
-      const hash = await writeAddPool({
+      console.log('add pool lookup =>', {
+        token0: token0.address,
+        token1: token1.address,
+        inIsToken0,
+        fee: Number(fee),
+        lowP,
+        highP,
+        tickLower,
+        tickUpper,
+        curP,
+        sqrtPriceX96,
+      });
+      const { request } = await simulateContract(wagmiConfig, {
         address: poolManagerAddress,
         abi: poolAbi,
         functionName: 'createAndInitializePoolIfNecessary',
         args: [
           {
-            token0: tokenIn.address,
-            token1: tokenOut.address,
+            token0: token0.address,
+            token1: token1.address,
             fee: Number(fee), //uint24
-            tickLower: priceToTick(lowPrice), //int24
-            tickUpper: priceToTick(highPrice),
-            sqrtPriceX96: priceToSqrtPriceX96(
-              currentPrice,
-              tokenIn.decimals ?? 18,
-              tokenOut.decimals ?? 18
-            ),
+            tickLower, //int24
+            tickUpper,
+            sqrtPriceX96,
           },
         ],
+        account,
       });
-
+      const hash = await writeAddPool(request);
       // 等上链
       await waitForTransactionReceipt(wagmiConfig, { hash });
-      setOpenAddPool(false);
       await refetch();
+      setOpenAddPool(false);
       alert('Add pool success');
     } catch (error: unknown) {
       const msg = errorMsg(error, 'Add pool failed');
@@ -307,7 +334,7 @@ export const PoolPage = () => {
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 30);
     try {
       // 便于核对池子定位是否正确
-      console.log('mint pool lookup =>', {
+      console.log('mint position lookup =>', {
         token0: pool.token0,
         token1: pool.token1,
         index: pool.index,
