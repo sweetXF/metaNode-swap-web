@@ -12,7 +12,11 @@ export const useTokenInfos = (pairs: TokenHolderPair[]) => {
   const { address: user } = useAccount();
 
   // 一次性读：每个 pair 都生成 symbol 、 decimals 、 balance(holder ?? user) 三个调用
-  const { data, isLoading: isTokenInfoLoading } = useReadContracts({
+  const {
+    data,
+    isLoading: isTokenInfoLoading,
+    refetch: refetchBalance,
+  } = useReadContracts({
     contracts: pairs.flatMap(({ token, holder }) => {
       const owner = holder ?? user;
       return [
@@ -66,5 +70,5 @@ export const useTokenInfos = (pairs: TokenHolderPair[]) => {
     return reTokenInfo;
   };
 
-  return { tokenMap, isTokenInfoLoading, fetchTokenInfo };
+  return { tokenMap, isTokenInfoLoading, fetchTokenInfo, refetchBalance };
 };

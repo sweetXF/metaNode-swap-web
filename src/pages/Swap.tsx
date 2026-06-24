@@ -7,7 +7,7 @@ import { simulateContract, waitForTransactionReceipt } from '@wagmi/core';
 import { wagmiConfig } from '../wagmi';
 import { getContractAddress } from '../config/contracts';
 import { swapRouterAbi } from '../abi/SwapRouter';
-import { formatBigInt, formatToBigInt } from '../utils/format';
+import { formatToBigInt } from '../utils/format';
 import { useDebounce } from '../hooks/useDebounce';
 import { formatUnits } from 'viem';
 import { useTokenList } from '../hooks/useTokenList';
@@ -15,11 +15,14 @@ import { CellInput } from '../components/CellInput';
 import { getSwapBestPoolAndPriceLimit } from '../utils/getSwapBestPoolAndPriceLimit';
 import { errorMsg } from '../config/errorMsg';
 import { useErc20Approval } from '../hooks/useErc20Approval';
+import { useQueryClient } from '@tanstack/react-query';
 
 export const SwapPage = () => {
   const chainId = useChainId();
   const { address: account, isConnected, chainId: curChainId } = useAccount();
   const isChainidMatch = curChainId === chainId;
+
+  const queryClient = useQueryClient();
 
   const SwapRouterAddress = getContractAddress(chainId, 'SwapRouter');
 
@@ -241,7 +244,7 @@ export const SwapPage = () => {
     setInputSource(null);
   }, [tokenIn, tokenOut]);
 
-  const { approveToken, ensureApprovedAllowance } = useErc20Approval(
+  const { refetchAllowance, ensureApprovedAllowance } = useErc20Approval(
     tokenIn?.address,
     SwapRouterAddress
   );
@@ -372,6 +375,17 @@ export const SwapPage = () => {
         await waitForTransactionReceipt(wagmiConfig, { hash });
       }
       alert('Swap success');
+      refetchAllowance(); // 刷新授权额度
+      // 刷新合约数据(仅刷新合约读取缓存)，目前解决AmountInput Balance刷新的方案
+      await queryClient.invalidateQueries({
+        predicate: query => {
+          const key = query.queryKey[0];
+          return key === 'readContracts' || key === 'readContract';
+        },
+      });
+      setAmountIn('');
+      setAmountOut('');
+      setSwapError('');
     } catch (error: unknown) {
       const msg = errorMsg(error, 'Swap failed');
       setSwapError(msg);
