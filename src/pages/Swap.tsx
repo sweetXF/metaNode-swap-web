@@ -61,7 +61,7 @@ export const SwapPage = () => {
   type InputSource = 'in' | 'out' | null;
   const [inputSource, setInputSource] = useState<InputSource>(null);
 
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
   const [swapError, setSwapError] = useState('');
 
   //用一个 state 统一管理"哪个输入框正在选 token"
@@ -116,8 +116,7 @@ export const SwapPage = () => {
           chainId,
           tokenIn.address,
           tokenOut.address,
-          maxSlippage,
-          true
+          maxSlippage
         );
 
         const { result: outRaw } = await simulateContract(wagmiConfig, {
@@ -172,8 +171,7 @@ export const SwapPage = () => {
           chainId,
           tokenIn.address,
           tokenOut.address,
-          maxSlippage,
-          false
+          maxSlippage
         );
         // 询价
         const { result: inRaw } = await simulateContract(wagmiConfig, {
@@ -299,6 +297,13 @@ export const SwapPage = () => {
     const deadlineTs = BigInt(now + Number(deadline) * 60);
     // 调 SwapRouter 的 exactInput、 exactOutput
     try {
+      //获取最优池和限价
+      const { bestPoolIndex, sqrtPriceLimit } = await getSwapBestPoolAndPriceLimit(
+        chainId,
+        tokenIn.address,
+        tokenOut.address,
+        maxSlippage
+      );
       if (inputSource === 'in') {
         //是否授权足够额度
         const approveTokenIn = await ensureApprovedAllowance(rawAmountIn);
@@ -309,14 +314,6 @@ export const SwapPage = () => {
         // 固定输入，最小输出 = 预期输出 * (1-滑点)
         const minAmountOutRaw = (rawAmountOut * (10000n - slippageBps)) / 10000n;
 
-        //获取最优池和限价
-        const { bestPoolIndex, sqrtPriceLimit } = await getSwapBestPoolAndPriceLimit(
-          chainId,
-          tokenIn.address,
-          tokenOut.address,
-          maxSlippage,
-          true
-        );
         const { request } = await simulateContract(wagmiConfig, {
           address: SwapRouterAddress,
           abi: swapRouterAbi,
@@ -331,7 +328,9 @@ export const SwapPage = () => {
               amountIn: rawAmountIn,
               amountOutMinimum: minAmountOutRaw,
               sqrtPriceLimitX96:
-                sqrtPriceLimit ?? getSqrtPriceLimit(tokenIn.address, tokenOut.address),
+                sqrtPriceLimit && sqrtPriceLimit > 0n
+                  ? sqrtPriceLimit
+                  : getSqrtPriceLimit(tokenIn.address, tokenOut.address),
             },
           ],
           account,
@@ -348,14 +347,6 @@ export const SwapPage = () => {
           return;
         }
 
-        //获取最优池和限价
-        const { bestPoolIndex, sqrtPriceLimit } = await getSwapBestPoolAndPriceLimit(
-          chainId,
-          tokenIn.address,
-          tokenOut.address,
-          maxSlippage,
-          false
-        );
         const { request } = await simulateContract(wagmiConfig, {
           address: SwapRouterAddress,
           abi: swapRouterAbi,
@@ -370,7 +361,9 @@ export const SwapPage = () => {
               amountOut: rawAmountOut,
               amountInMaximum: maxAmountInRaw,
               sqrtPriceLimitX96:
-                sqrtPriceLimit ?? getSqrtPriceLimit(tokenIn.address, tokenOut.address),
+                sqrtPriceLimit && sqrtPriceLimit > 0n
+                  ? sqrtPriceLimit
+                  : getSqrtPriceLimit(tokenIn.address, tokenOut.address),
             },
           ],
           account,
@@ -450,7 +443,7 @@ export const SwapPage = () => {
 
           <button
             onClick={handleSwap}
-            disabled={!amountIn || !amountOut || !isConnected || !isChainidMatch}
+            disabled={!amountIn || !amountOut || !isConnected || !isChainidMatch || isPending}
             className="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             {isConnected ? (isChainidMatch ? 'Swap' : 'Connect to Sepolia') : 'Connect wallet'}

@@ -10,14 +10,13 @@ import { wagmiConfig } from '../wagmi';
  * @param tokenInAddr 输入代币地址
  * @param tokenOutAddr 输出代币地址
  * @param slippagePercent 页面滑点百分比，如 "5.5" = 5.5%
- * @param isExactInput true=exactInput / false=exactOutput
  */
 export const getSwapBestPoolAndPriceLimit = async (
   chainId: number,
   tokenInAddr: `0x${string}`,
   tokenOutAddr: `0x${string}`,
-  slippagePercent: string,
-  isExactInput: boolean
+  slippagePercent: string
+  // isExactInput: boolean
 ): Promise<{ bestPoolIndex: number; sqrtPriceLimit: bigint }> => {
   if (!chainId) throw new Error('no chainId');
   if (+slippagePercent < 0 || +slippagePercent > 100)
@@ -45,12 +44,15 @@ export const getSwapBestPoolAndPriceLimit = async (
     if (a.liquidity < b.liquidity) return 1; // b更大 → b放前面
     return 0; //a.liquidity = b.liquidity 顺序不变
   });
-  const bestPoolIndex = curPairsPools[0].index;
-  const sqrtPriceX96 = curPairsPools[0].sqrtPriceX96;
+  const bestPool = curPairsPools[0];
+  const bestPoolIndex = bestPool.index;
+  const sqrtPriceX96 = bestPool.sqrtPriceX96;
+
+  const inIsToken0 = inAddr === bestPool.token0.toLowerCase();
 
   let scale: number;
   const slippage = Number(slippagePercent) / 100;
-  if (isExactInput) {
+  if (inIsToken0) {
     // 输入固定tokenIn，允许价格下跌，下限 sqrt(P*(1-slippage)),低于此价拒绝成交
     scale = Math.sqrt(1 - slippage);
   } else {
